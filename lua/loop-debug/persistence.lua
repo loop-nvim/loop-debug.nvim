@@ -5,7 +5,7 @@ local Trackers  = require("loop.tools.Trackers")
 ---@alias loopdebug.ConfigElement "layout"|"watch"|"breakpoints"
 
 ---@class loopdebug.PersistenceData
----@field store loop.TaskProviderStore
+---@field state loop.ExtensionState
 
 ---@type loopdebug.PersistenceData?
 local _current_data
@@ -28,10 +28,10 @@ function M.add_tracker(callbacks)
     return ref
 end
 
----@param store loop.TaskProviderStore
-function M.on_workspace_load(store)
+---@param state loop.ExtensionState
+function M.on_workspace_load(state)
     _current_data = {
-        store = store
+        state = state
     }
     _trackers:invoke("on_ws_load")
 end
@@ -41,8 +41,8 @@ function M.on_workspace_unload()
     _trackers:invoke("on_ws_unload")
 end
 
----@param store loop.TaskProviderStore
-function M.on_store_will_save(store)
+---@param state loop.ExtensionState
+function M.on_state_will_save(state)
     _trackers:invoke_sync("on_ws_will_save")
 end
 
@@ -52,10 +52,10 @@ end
 
 ---@param element loopdebug.ConfigElement
 ---@param data table
-function M.set_config(element, data) if _current_data then _current_data.store.set(element, data) end end
+function M.set_config(element, data) if _current_data then _current_data.state.set(element, data) end end
 
 ---@param element loopdebug.ConfigElement
 ---@return table?
-function M.get_config(element) return _current_data and _current_data.store.get(element) end
+function M.get_config(element) return _current_data and _current_data.state.get(element) end
 
 return M
