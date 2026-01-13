@@ -342,7 +342,7 @@ debuggers.debugpy = {
         adapter_id = "debugpy",
         name = "debugpy",
         type = "executable",
-        command = { "python3", "-m", "debugpy.adapter" },
+        command = { mason_bin("python3"), "-m", "debugpy.adapter" },
     },
     launch_args = function(context)
         local task = context.task
@@ -361,16 +361,19 @@ debuggers.debugpy = {
 debuggers["debugpy:remote"] = {
     adapter_config = {
         adapter_id = "debugpy",
-        name = "Python Remote Debugger",
-        type = "server",
-        host = "127.0.0.1",
-        port = 0,
+        name = "debugpy",
+        type = "executable",
+        command = { mason_bin("python3"), "-m", "debugpy.adapter" },
     },
     attach_args = function(context)
         local task = context.task
         return {
             justMyCode = task.justMyCode ~= nil and task.justMyCode or false,
-            console = "integratedTerminal",
+            request = "attach",
+            connect = {
+                host = task.host or '127.0.0.1',
+                port = task.port or 0
+            }
         }
     end,
 }

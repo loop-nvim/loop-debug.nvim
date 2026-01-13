@@ -150,7 +150,8 @@ return {
             name = "Attach",
             type = "debug",
             debugger = "debugpy:remote",
-            request = "attach",
+            host = "127.0.0.1",
+            port = 0,
             justMyCode = false,
         }
     },
