@@ -19,7 +19,7 @@ local _stack_compbuffer
 local _variables_comp
 
 ---@type loopdebug.comp.StackTrace?
-local _stack_comp
+local _stacktrace_comp
 
 -- Configuration and State Storage
 local _default_layout = {
@@ -57,9 +57,9 @@ local function _destroy_components()
         _variables_comp:dispose()
         _variables_comp = nil
     end
-    if _stack_comp then
-        _stack_comp:dispose()
-        _stack_comp = nil
+    if _stacktrace_comp then
+        _stacktrace_comp:dispose()
+        _stacktrace_comp = nil
     end
 end
 
@@ -68,7 +68,7 @@ end
 local function _create_components(vars_winid, stack_winid)
     _destroy_components()
     assert(not _vars_compbuffer and not _stack_compbuffer)
-    assert(not _variables_comp and not _stack_comp)
+    assert(not _variables_comp and not _stacktrace_comp)
 
     _vars_compbuffer = CompBuffer:new("debugvars", "Variables")
     _stack_compbuffer = CompBuffer:new("callstack", "Call Stack")

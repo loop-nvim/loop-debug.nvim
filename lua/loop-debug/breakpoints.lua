@@ -224,7 +224,7 @@ function M.get_breakpoints()
 end
 
 ---@param breakpoints loopdebug.SourceBreakpoint[]
-function _set_breakpoints(breakpoints)
+local function _set_breakpoints(breakpoints)
     _clear_breakpoints()
 
     table.sort(breakpoints, function(a, b)
@@ -313,6 +313,7 @@ function M.breakpoints_command(command)
     end
 end
 
+local _init_done = false
 function M.init()
     if _init_done then return end
     _init_done = true

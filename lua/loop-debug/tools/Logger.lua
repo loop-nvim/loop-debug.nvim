@@ -1,4 +1,3 @@
-
 ---@class loopdebug.tools.Logger
 local Logger = {}
 Logger.__index = Logger
@@ -104,8 +103,8 @@ function Logger:log(content, level)
 
 	local timestamp = os.date("%Y-%m-%d %H:%M:%S")
 	local level_name = LEVEL_NAMES[level] or tostring(level)
-    
-    ---@diagnostic disable-next-line: undefined-field
+
+	---@diagnostic disable-next-line: undefined-field
 	local line = string.format("[%s] [%s] [%s] %s\n", timestamp, level_name, self.module, msg)
 
 	local file = open_log_file()

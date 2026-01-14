@@ -15,8 +15,7 @@ end
 local function get_task_args(task)
     if task.args then return task.args end
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
-    local unpack_func = table.unpack or unpack
-    return { unpack_func(cmdparts, 2) }
+    return { unpack(cmdparts, 2) }
 end
 
 ---@class loopdebug.Config.Debugger.HookContext

@@ -37,60 +37,60 @@ local _current_view
 ---@param callbacks loopdebug.events.Tracker
 ---@return loop.TrackerRef
 function M.add_tracker(callbacks)
-    local tracker_ref = _trackers:add_tracker(callbacks)
-    if callbacks.on_session_added then
-        for id, info in pairs(_sessions) do
-            callbacks.on_session_added(id, info)
-        end
-    end
-    if _current_view and callbacks.on_view_udpate then
-        callbacks.on_view_udpate(_current_view)
-    end
-    return tracker_ref
+	local tracker_ref = _trackers:add_tracker(callbacks)
+	if callbacks.on_session_added then
+		for id, info in pairs(_sessions) do
+			callbacks.on_session_added(id, info)
+		end
+	end
+	if _current_view and callbacks.on_view_udpate then
+		callbacks.on_view_udpate(_current_view)
+	end
+	return tracker_ref
 end
 
 function M.report_debug_start()
-    _sessions = {}
-    _current_view = nil
-    _trackers:invoke("on_debug_start");
+	_sessions = {}
+	_current_view = nil
+	_trackers:invoke("on_debug_start");
 end
 
 ---@param success boolean
 function M.report_debug_end(success)
-    _sessions = {}
-    _current_view = nil
-    _trackers:invoke("on_debug_end", success);
+	_sessions = {}
+	_current_view = nil
+	_trackers:invoke("on_debug_end", success);
 end
 
 ---@type fun(id:number,info:loopdebug.events.SessionInfo)
 function M.report_session_added(id, info)
-    _sessions[id] = info
-    _trackers:invoke("on_session_added", id, info);
+	_sessions[id] = info
+	_trackers:invoke("on_session_added", id, info);
 end
 
 ---@type fun(id:number,info:loopdebug.events.SessionInfo)
 function M.report_session_update(id, info)
-    assert(_sessions[id])
-    _sessions[id] = info
-    _trackers:invoke("on_session_update", id, info);
+	assert(_sessions[id])
+	_sessions[id] = info
+	_trackers:invoke("on_session_update", id, info);
 end
 
 ---@type fun(id:number)
 function M.report_session_removed(id)
-    _sessions[id] = nil
-    _trackers:invoke("on_session_removed", id);
+	_sessions[id] = nil
+	_trackers:invoke("on_session_removed", id);
 end
 
 ---@type fun(view:loopdebug.events.CurrentViewUpdate)
 function M.report_view_update(view)
-    _current_view = view
-    _trackers:invoke("on_view_udpate", view);
+	_current_view = view
+	_trackers:invoke("on_view_udpate", view);
 end
 
 ---@param sess_id number
 ---@param event loopdebug.session.notify.BreakpointsEvent
 function M.report_breakpoints_update(sess_id, event)
-    _trackers:invoke("on_breakpoints_update", sess_id, event);    
+	_trackers:invoke("on_breakpoints_update", sess_id, event);
 end
 
 return M

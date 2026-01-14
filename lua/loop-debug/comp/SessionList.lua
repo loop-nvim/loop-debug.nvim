@@ -108,6 +108,7 @@ function SessionListComp:_refresh()
     for _, sess_id in ipairs(session_ids) do
         local info = self._sessions[sess_id]
         local nb_paused_threads = info.nb_paused_threads
+		local flag
         if nb_paused_threads and nb_paused_threads > 0 then
             flag = symbols.paused
         else
