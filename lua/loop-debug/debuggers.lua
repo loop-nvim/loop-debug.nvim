@@ -120,25 +120,26 @@ debuggers.lua = {
 }
 
 debuggers["lua:remote"] = {
-    adapter_config = {
-        adapter_id = "lua",
-        name = "Lua Remote Debugger",
-        type = "server",
-        host = "127.0.0.1",
-        port = 0,
-    },
+    adapter_config = function(context)
+        return {
+            adapter_id = "lua",
+            name = "Lua Remote Debugger",
+            type = "server",
+            host = context.task.host or "127.0.0.1",
+            port = tonumber(context.task.port),
+        }
+    end,
     attach_args = function(context)
         local task = context.task
         return {
             request = "attach",
             type = "lua",
-            host = task.host or "127.0.0.1",
-            port = task.port or 8086,
+            host = context.task.host or "127.0.0.1",
+            port = tonumber(context.task.port),
             cwd = _get_task_cwd(context),
             stopOnEntry = false,
         }
     end,
-    terminate_debuggee = false,
 }
 
 -- ==================================================================
@@ -296,7 +297,7 @@ debuggers["js-debug"] = {
             adapter_id = "js-debug",
             name = "js-debug",
             type = "server",
-            host = "::1",
+            host = context.task.host or "::1",
             port = tonumber(context.task.port) or 0, -- Fallback to 0 if not yet set by hook
             cwd = _get_task_cwd(context),
         }
@@ -358,20 +359,23 @@ debuggers.debugpy = {
 }
 
 debuggers["debugpy:remote"] = {
-    adapter_config = {
-        adapter_id = "debugpy",
-        name = "debugpy",
-        type = "executable",
-        command = { mason_bin("python3"), "-m", "debugpy.adapter" },
-    },
+    adapter_config = function(context)
+        return {
+            adapter_id = "debugpy",
+            name = "debugpy",
+            type = "server",
+            host = context.task.host or "127.0.0.1",
+            port = tonumber(context.task.port),
+        }
+    end,
     attach_args = function(context)
         local task = context.task
         return {
             justMyCode = task.justMyCode ~= nil and task.justMyCode or false,
             request = "attach",
             connect = {
-                host = task.host or '127.0.0.1',
-                port = task.port or 0
+                host = context.task.host or "127.0.0.1",
+                port = tonumber(context.task.port),
             }
         }
     end,
@@ -489,19 +493,20 @@ debuggers.php = {
 }
 
 debuggers.java = {
-    adapter_config = {
-        adapter_id = "java",
-        name = "Java (jdtls)",
-        type = "server",
-        host = "127.0.0.1",
-        port = 0,
-    },
+    adapter_config = function(context)
+        return {
+            adapter_id = "java",
+            name = "Java (jdtls)",
+            type = "server",
+            host = context.task.host or "127.0.0.1",
+            port = tonumber(context.task.port),
+        }
+    end,
     attach_args = function(context)
-        local task = context.task
         return {
             request = "attach",
-            hostName = task.hostName or "127.0.0.1",
-            port = task.port or 5005,
+            host = context.task.host or "127.0.0.1",
+            port = tonumber(context.task.port),
         }
     end,
 }
