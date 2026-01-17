@@ -48,5 +48,4 @@ function M.format_variable(value, presentationHint)
     return value
 end
 
-
 return M

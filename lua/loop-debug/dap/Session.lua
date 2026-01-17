@@ -40,7 +40,7 @@ end
 ---@return loopdebug.session.DataProviders
 function Session:_create_data_providers()
     local is_available = function()
-        return self._base_session ~= nil and self._fsm:curr_state() == 'running'
+        return self._base_session ~= nil and self._fsm and self._fsm:curr_state() == 'running'
     end
 
     local na_msg = "not available"
@@ -178,6 +178,7 @@ function Session:start(args)
         end
     end
 
+    local start_ok, start_err
     if adapter.type ~= "server" then
         local cmd_and_args = strtools.cmd_to_string_array(adapter.command)
         if #cmd_and_args == 0 then
@@ -197,27 +198,37 @@ function Session:start(args)
         local dap_args = { unpack(cmd_and_args, 2) }
 
         self._base_session = BaseSession:new(self._name)
-        self._base_session:start({
-            dap_mode = "executable",
-            dap_cmd = dap_path,  -- dap process
-            dap_args = dap_args, -- dap args
-            dap_env = adapter.env,
-            dap_cwd = adapter.cwd,
-            on_stderr = stderr_handler,
-            on_exit = exit_handler,
-        })
+        start_ok, start_err = pcall(function()
+            self._base_session:start({
+                dap_mode = "executable",
+                dap_cmd = dap_path,  -- dap process
+                dap_args = dap_args, -- dap args
+                dap_env = adapter.env,
+                dap_cwd = adapter.cwd,
+                on_stderr = stderr_handler,
+                on_exit = exit_handler,
+            })
+        end)
     else
         if not adapter.host or adapter.host == "" or not adapter.port then
-            return false, "Missing remote DAP host name or port"
+            return false, "Missing DAP server host name or port"
+        end
+        if adapter.port <= 0 or adapter.port >= 65536 then
+            return false, "Invalid DAP server port: " .. tostring(adapter.port)
         end
         self._base_session = BaseSession:new(self._name)
-        self._base_session:start({
-            dap_mode = "server",
-            dap_host = adapter.host,
-            dap_port = adapter.port,
-            on_stderr = stderr_handler,
-            on_exit = exit_handler,
-        })
+        start_ok, start_err = pcall(function()
+            self._base_session:start({
+                dap_mode = "server",
+                dap_host = adapter.host,
+                dap_port = adapter.port,
+                on_stderr = stderr_handler,
+                on_exit = exit_handler,
+            })
+        end)
+    end
+    if not start_ok then
+        return false, "Debug adapter initialization error, " .. tostring(start_err)
     end
 
     if not self._base_session:running() then

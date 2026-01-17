@@ -30,13 +30,16 @@ end
 ---@return string preview
 ---@return boolean is_different
 local function _preview_string(str, max_len)
+    assert(type(str) == 'string', str)
     max_len = max_len > 2 and max_len or 2
     if #str < max_len and not str:find("\n", 1, true) then
         return str, false
     end
     local preview = str:gsub("\n", "⏎")
     if #preview <= max_len then return preview, true end
-    return vim.fn.trim(preview:sub(1, max_len), "", 2) .. "…", true
+    preview = preview:sub(1, max_len)
+    preview = preview:match("^%s*(.-)%s*$") -- trim
+    return preview .. "…", true
 end
 
 ---@param expr string
