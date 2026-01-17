@@ -7,13 +7,12 @@ local debugevents = require('loop-debug.debugevents')
 ---@field new fun(self: loopdebug.comp.SessionListComp): loopdebug.comp.SessionListComp
 local SessionListComp = class(ItemList)
 
----@param item loop.comp.ItemList.Item
 ---@param highlights loop.Highlight[]
-local function _item_formatter(item, highlights)
-    local str = item.data.label
-    if item.data.nb_paused_threads and item.data.nb_paused_threads > 0 then
-        local s = item.data.nb_paused_threads > 1 and "s" or ""
-        str = str .. (" ( %d paused thread%s)"):format(item.data.nb_paused_threads, s)
+local function _item_formatter(id, data, highlights)
+    local str = data.label
+    if data.nb_paused_threads and data.nb_paused_threads > 0 then
+        local s = data.nb_paused_threads > 1 and "s" or ""
+        str = str .. (" ( %d paused thread%s)"):format(data.nb_paused_threads, s)
     end
     return str
 end

@@ -8,16 +8,15 @@ local Trackers = require("loop.tools.Trackers")
 ---@field new fun(self: loopdebug.comp.StackTrace, name:string): loopdebug.comp.StackTrace
 local StackTrace = class(ItemListComp)
 
----@param item loop.comp.ItemList.Item
 ---@param highlights loop.Highlight[]
-local function _item_formatter(item, highlights)
+local function _item_formatter(id, data, highlights)
     ---@type loop.Highlight[]
     local hls = {}
 
-    local frame = item.data.frame
+    local frame = data.frame
     if not frame then
-        table.insert(highlights, { group = item.data.greyout and "NonText" or "Directory"})
-        return item.data.text
+        table.insert(highlights, { group = data.greyout and "NonText" or "Directory"})
+        return data.text
     end
 
     local parts = {}
@@ -64,7 +63,7 @@ local function _item_formatter(item, highlights)
         end
     end
 
-    if item.data.greyout then
+    if data.greyout then
         table.insert(highlights, { group = "NonText" })
     else
         for _, hl in ipairs(hls) do
