@@ -3,6 +3,7 @@ local schema = {
     type = "object",
     required = { "debugger", "request" },
     additionalProperties = true,
+    __order = { "command", "cwd", "debugger", "request", "host", "port" },
     properties = {
         debugger = {
             type = { "string" },
