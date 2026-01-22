@@ -235,7 +235,7 @@ end
 ---@param parent_path string
 ---@param scopes loopdebug.proto.Scope[]
 ---@param data_source loopdebug.events.CurrentViewUpdate
----@param scopes_cb loop.comp.ItemTree.ChildrenCallback
+---@param scopes_cb fun(items: loop.comp.ItemTree.Item[])
 function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_source, scopes_cb)
     ---@type loop.comp.ItemTree.Item[]
     local scope_items = {}

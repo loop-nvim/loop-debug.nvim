@@ -27,7 +27,7 @@ local Trackers = require("loop.tools.Trackers")
 ---@field terminate fun()
 
 ---@class loop.job.debugjob.Tracker
----@field on_startup_error fun(|nil
+---@field on_startup_error fun()|nil
 ---@field on_exit fun(code : number)|nil
 ---@field on_sess_added fun(id:number,name:string, parent_id:number,ctrl:loop.job.DebugJob.SessionController,data:loopdebug.session.DataProviders)|nil
 ---@field on_sess_removed fun(id:number, name:string)|nil
