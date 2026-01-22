@@ -101,9 +101,10 @@ local _var_kind_to_hl_group = {
 
 ---@param id any
 ---@param data any
----@param highlights loop.Highlight[]
----@return string
-local function _variable_node_formatter(id, data, highlights)
+---@return string, loop.Highlight[]?
+local function _variable_node_formatter(id, data)
+    ---@type loop.Highlight[]
+    local highlights = {}
     if not data then return "" end
     if data.is_na and not data.name then
         table.insert(highlights, { group = "NonText" })
@@ -133,7 +134,7 @@ local function _variable_node_formatter(id, data, highlights)
     local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
     table.insert(highlights, { group = val_hl, start_col = start, end_col = start + #preview })
 
-    return name .. ': ' .. preview
+    return (name .. ': ' .. preview), highlights
 end
 
 function Variables:init()

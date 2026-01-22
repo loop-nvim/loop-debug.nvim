@@ -1,5 +1,4 @@
 local schema = {
-    __name = "Debug",
     type = "object",
     required = { "debugger", "request" },
     additionalProperties = true,
