@@ -1,8 +1,6 @@
 local M = {}
 
 local run = require('loop-debug.run')
---local ui = require('loop-debug.ui')
-local jsontools = require('loop.tools.json')
 
 function M.get_task_type_provider()
     ---@type loop.TaskTypeProvider
