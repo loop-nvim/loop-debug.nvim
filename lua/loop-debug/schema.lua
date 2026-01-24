@@ -3,7 +3,7 @@ local schema = {
     required = { "debugger", "request" },
     additionalProperties = true,
 
-    __order = {
+    ["x-order"] = {
         "command",
         "cwd",
         "debugger",

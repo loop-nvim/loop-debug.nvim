@@ -269,7 +269,7 @@ function Variables:_load_watch_expressions(context)
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
 
-    self:upsert_item({ id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
+    self:upsert_item(nil,{ id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
 
     if not persistence.is_ws_open() then return end
     local list = persistence.get_config("watch") or {}
@@ -313,7 +313,7 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
     if not ds or not ds.frame or not ds.data_providers then
         -- Keep existing data but ensure it is marked as greyed out
         var_item.data.greyout = true
-        self:upsert_item(var_item)
+        self:upsert_item(nil, var_item)
         return
     end
 
@@ -336,7 +336,7 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
                 end
             end
         end
-        self:upsert_item(var_item)
+        self:upsert_item(nil, var_item)
     end)
 end
 
@@ -364,7 +364,7 @@ function Variables:_load_session_vars(context)
             end)
         end
     end
-    self:upsert_item(root_item)
+    self:upsert_item(nil, root_item)
 end
 
 ---@param comp loop.CompBufferController
