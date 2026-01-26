@@ -230,16 +230,23 @@ function M.select_breakpoint()
         local verified = bpdata and _get_breakpoint_state(bpdata) or false
         local item = {
             label = _format_breakpoint(bp, verified),
+            file = bp.file,
+            line = bp.line,
             data = bp,
         }
         table.insert(choices, item)
     end
-    selector.select("Breakpoints", choices, nil, function(bp)
-        ---@cast bp loopdebug.SourceBreakpoint
-        if bp and bp.file then
+    selector.select({
+        prompt = "Breakpoints",
+        items = choices,
+        file_preview = true,
+        callback = function(bp)
+            ---@cast bp loopdebug.SourceBreakpoint
+            if bp and bp.file then
             uitools.smart_open_file(bp.file, bp.line, bp.column)
+            end
         end
-    end)
+    })
 end
 
 function M.init()

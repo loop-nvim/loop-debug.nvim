@@ -530,9 +530,13 @@ local function _process_select_session_command(jobdata)
     for sess_id, sess_data in pairs(jobdata.session_data) do
         table.insert(choices, { label = sess_data.sess_name, data = sess_id })
     end
-    selector.select("Select debug session", choices, nil, function(sess_id)
-        if sess_id then _switch_to_session(jobdata, sess_id) end
-    end)
+    selector.select({
+        prompt = "Select debug session",
+        items = choices,
+        callback = function(sess_id)
+            if sess_id then _switch_to_session(jobdata, sess_id) end
+        end
+    })
     return true
 end
 
@@ -556,11 +560,15 @@ local function _process_select_thread_command(jobdata)
                         data = thread.id
                     })
                 end
-                selector.select("Select thread", choices, nil, function(thread_id)
-                    if thread_id and sess_id == jobdata.current_session_id then
-                        _switch_to_thread(jobdata, sess_id, thread_id, true)
+                selector.select({
+                    prompt = "Select thread",
+                    items = choices,
+                    callback = function(thread_id)
+                        if thread_id and sess_id == jobdata.current_session_id then
+                            _switch_to_thread(jobdata, sess_id, thread_id, true)
+                        end
                     end
-                end)
+                })
             end
         end
     end)
@@ -587,11 +595,15 @@ local function _process_select_frame_command(jobdata)
                 for _, frame in pairs(data.stackFrames) do
                     table.insert(choices, { label = tostring(frame.name), data = frame })
                 end
-                selector.select("Select frame", choices, nil, function(frame)
-                    if frame and sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
-                        _switch_to_frame(jobdata, frame, true)
+                selector.select({
+                    prompt = "Select frame",
+                    items = choices,
+                    callback = function(frame)
+                        if frame and sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
+                            _switch_to_frame(jobdata, frame, true)
+                        end
                     end
-                end)
+                })
             end
         end
     end)
@@ -599,6 +611,7 @@ local function _process_select_frame_command(jobdata)
 end
 
 ---@param jobdata loopdebug.mgr.DebugJobData
+---@diagnostic disable-next-line: undefined-doc-name
 ---@param opts vim.api.keyset.create_user_command.command_args
 local function _process_inspect_var_command(jobdata, opts)
     local sess_id = jobdata.current_session_id
