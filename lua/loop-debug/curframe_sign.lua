@@ -2,7 +2,7 @@
 local M           = {}
 
 local debugevents = require('loop-debug.debugevents')
-local signsmgr    = require('loop-debug.tools.signsmgr')
+local signsmgr    = require('loop.signsmgr')
 local config      = require("loop-debug.config")
 local filetools   = require('loop.tools.file')
 local uitools     = require('loop.tools.uitools')

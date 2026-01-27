@@ -2,7 +2,7 @@ local M         = {}
 
 local Trackers  = require("loop.tools.Trackers")
 
----@alias loopdebug.ConfigElement "layout"|"watch"|"breakpoints"
+---@alias loopdebug.ConfigElement "layout"|"watch"|"breakpoints"|"bookmarks"
 
 ---@class loopdebug.PersistenceData
 ---@field state loop.ExtensionState

@@ -1,5 +1,5 @@
 local config        = require('loop-debug.config')
-local signsmgr      = require('loop-debug.tools.signsmgr')
+local signsmgr      = require('loop.signsmgr')
 local breakpoints   = require('loop-debug.breakpoints')
 local debugevents   = require('loop-debug.debugevents')
 local selector      = require("loop.tools.selector")
