@@ -154,10 +154,14 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
-function DebugJob:add_breakpoint(bp)
-    self._breakpoints[bp.id] = bp
-    for _, s in pairs(self._sessions) do
-        s:set_source_breakpoint(bp)
+function DebugJob:update_breakpoint(bp)
+    if bp.enabled then
+        self._breakpoints[bp.id] = bp
+        for _, s in pairs(self._sessions) do
+            s:set_source_breakpoint(bp)
+        end
+    else
+        self:remove_breakpoint(bp)
     end
 end
 

@@ -96,7 +96,7 @@ function SessionListComp:_refresh()
     end
 
     local session_ids = vim.tbl_keys(self._sessions)
-    vim.fn.sort(session_ids)
+    table.sort(session_ids)
 
     ---@type loop.comp.ItemList.Item[]
     local list_items = {}

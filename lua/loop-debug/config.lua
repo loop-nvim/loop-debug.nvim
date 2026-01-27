@@ -10,9 +10,12 @@
 ---@field active_breakpoint string
 ---@field inactive_breakpoint string
 ---@field logpoint string
----@field logpoint_inactive string
+---@field inactive_logpoint string
 ---@field cond_breakpoint string
----@field cond_breakpoint_inactive string
+---@field inactive_cond_breakpoint string
+---@field disabled_breakpoint string
+---@field disabled_logpoint string
+---@field disabled_cond_breakpoint string
 
 ---@class loop-debug.Config
 ---@field stack_levels_limit? number

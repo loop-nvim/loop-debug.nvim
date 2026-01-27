@@ -201,7 +201,7 @@ debuggers.codelldb = {
             -- Integrated terminal is usually best for LLDB
             runInTerminal = task.runInTerminal ~= false,
             -- Enables pretty-printing for Rust/C++
-            sourceLanguages = task.sourceLanguages, -- { "cpp", "rust" },
+            sourceLanguages = task.sourceLanguages, -- example { "cpp", "rust" },
             -- This allows the debugger to find source files if paths are relative
             sourceMap = task.sourceMap,
         }

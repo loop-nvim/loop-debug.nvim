@@ -24,9 +24,13 @@ local DEFAULT_CONFIG = {
         active_breakpoint        = "●",
         inactive_breakpoint      = "○",
         logpoint                 = "◆",
-        logpoint_inactive        = "◇",
+        inactive_logpoint        = "◇",
         cond_breakpoint          = "■",
-        cond_breakpoint_inactive = "□",
+        inactive_cond_breakpoint = "□",
+        disabled_breakpoint      = "⊘", -- circle with slash
+        disabled_logpoint        = "⊗", -- circled X
+        disabled_cond_breakpoint = "⊟", -- square minus
+
     },
     debuggers = require("loop-debug.debuggers")
 }

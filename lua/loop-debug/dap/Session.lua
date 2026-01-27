@@ -19,6 +19,7 @@ local fsmdata = require('loop-debug.dap.fsmdata')
 ---@field _source_breakpoints loopdebug.session.SourceBreakpointsData
 ---@field _subsession_id number
 ---@field _data_providers loopdebug.session.DataProviders
+---@field _send_pending_bpts_requested boolean?
 local Session = class()
 
 ---@param name string
@@ -290,8 +291,20 @@ function Session:get_data_providers()
     return self._data_providers
 end
 
+function Session:_request_send_pending_breakpoints()
+    -- schedule sending to avoid multiple dap requests when setting breakpoints in a loop
+    if not self._send_pending_bpts_requested then
+        self._send_pending_bpts_requested = true
+        vim.schedule(function()
+            self._send_pending_bpts_requested = nil
+            self:_send_pending_breakpoints(function(success) end)
+        end)
+    end
+end
+
 ---@param breakpoint loopdebug.SourceBreakpoint
 function Session:set_source_breakpoint(breakpoint)
+    self:remove_breakpoint(breakpoint.id)
     local data = self._source_breakpoints
     ---@type loopdebug.session.SourceBPData
     local pbdata = { user_data = breakpoint, verified = false, dap_id = nil }
@@ -299,32 +312,29 @@ function Session:set_source_breakpoint(breakpoint)
     data.by_location[breakpoint.file] = data.by_location[breakpoint.file] or {}
     data.by_location[breakpoint.file][breakpoint.line] = pbdata
     data.pending_files[breakpoint.file] = true
-    if self._can_send_breakpoints then
-        self:_send_pending_breakpoints(function(success) end)
-    end
+    self:_request_send_pending_breakpoints()
 end
 
 ---@param id number
 function Session:remove_breakpoint(id)
     local data = self._source_breakpoints
     local bp = data.by_usr_id[id]
-    if bp then
-        data.by_usr_id[id] = nil
-        if bp.dap_id then
-            data.by_dap_id[bp.dap_id] = nil
-        end
-        if data.by_location[bp.user_data.file] then
-            local byline = data.by_location[bp.user_data.file]
-            byline[bp.user_data.line] = nil
-            if next(byline) == nil then
-                data.by_location[bp.user_data.file] = nil
-            end
-        end
-        data.pending_files[bp.user_data.file] = true
+    if not bp then
+        return
     end
-    if self._can_send_breakpoints then
-        self:_send_pending_breakpoints(function(success) end)
+    data.by_usr_id[id] = nil
+    if bp.dap_id then
+        data.by_dap_id[bp.dap_id] = nil
     end
+    if data.by_location[bp.user_data.file] then
+        local byline = data.by_location[bp.user_data.file]
+        byline[bp.user_data.line] = nil
+        if next(byline) == nil then
+            data.by_location[bp.user_data.file] = nil
+        end
+    end
+    data.pending_files[bp.user_data.file] = true
+    self:_request_send_pending_breakpoints()
 end
 
 function Session:remove_all_breakpoints()
@@ -335,9 +345,7 @@ function Session:remove_all_breakpoints()
     data.by_location = {}
     data.by_usr_id = {}
     data.by_dap_id = {}
-    if self._can_send_breakpoints then
-        self:_send_pending_breakpoints(function(success) end)
-    end
+    self:_request_send_pending_breakpoints()
 end
 
 ---@param id number
@@ -689,7 +697,7 @@ end
 ---@param on_complete fun(success:boolean)
 function Session:_send_pending_breakpoints(on_complete)
     if not self._can_send_breakpoints then
-        self._log:debug('cannot send breakpoints')
+        self._log:debug('cannot send breakpoints yet')
         on_complete(false)
         return
     end

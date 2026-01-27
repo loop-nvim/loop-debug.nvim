@@ -25,8 +25,11 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     local job = DebugJob:new(args.name)
 
     local bpts_tracker_ref = breakpoints.add_tracker({
-        on_added = function(bp) job:add_breakpoint(bp) end,
+        on_set = function(bp) job:update_breakpoint(bp) end,
         on_removed = function(bp) job:remove_breakpoint(bp) end,
+        on_enabled = function(bp) job:update_breakpoint(bp) end,
+        on_disabled = function(bp) job:update_breakpoint(bp) end,
+        on_moved = function(bp) job:update_breakpoint(bp) end,
         on_all_removed = function(bpts) job:remove_all_breakpoints(bpts) end
     })
 

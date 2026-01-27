@@ -17,9 +17,12 @@ local _sign_names   = {
     active_breakpoint        = "active_breakpoint",
     inactive_breakpoint      = "inactive_breakpoint",
     logpoint                 = "logpoint",
-    logpoint_inactive        = "logpoint_inactive",
+    inactive_logpoint        = "inactive_logpoint",
     cond_breakpoint          = "cond_breakpoint",
-    cond_breakpoint_inactive = "cond_breakpoint_inactive",
+    inactive_cond_breakpoint = "inactive_cond_breakpoint",
+    disabled_breakpoint      = "disabled_breakpoint",
+    disabled_logpoint        = "disabled_logpoint",
+    disabled_cond_breakpoint = "disabled_cond_breakpoint",
 }
 
 
@@ -34,16 +37,27 @@ local _breakpoints_data = {}
 ---@param verified boolean
 local function _format_breakpoint(bp, verified)
     local symbols = config.current.symbols
-    local symbol = verified and "●" or "○"
-    if bp.logMessage and bp.logMessage ~= "" then
-        symbol = verified and symbols.logpoint or symbols.logpoint_inactive
+
+    local symbol
+    if bp.enabled == false then
+        if bp.logMessage and bp.logMessage ~= "" then
+            symbol = symbols.disabled_logpoint
+        elseif bp.condition and bp.condition ~= "" or bp.hitCondition and bp.hitCondition ~= "" then
+            symbol = symbols.disabled_cond_breakpoint
+        else
+            symbol = symbols.disabled_breakpoint
+        end
+    else
+        -- Enabled breakpoints
+        if bp.logMessage and bp.logMessage ~= "" then
+            symbol = verified and symbols.logpoint or symbols.inactive_logpoint
+        elseif bp.condition and bp.condition ~= "" or bp.hitCondition and bp.hitCondition ~= "" then
+            symbol = verified and symbols.cond_breakpoint or symbols.inactive_cond_breakpoint
+        else
+            symbol = verified and symbols.active_breakpoint or symbols.inactive_breakpoint
+        end
     end
-    if bp.condition and bp.condition ~= "" then
-        symbol = verified and symbols.cond_breakpoint or symbols.cond_breakpoint_inactive
-    end
-    if bp.hitCondition and bp.hitCondition ~= "" then
-        symbol = verified and symbols.cond_breakpoint or symbols.cond_breakpoint_inactive
-    end
+
     local file = bp.file
     local wsdir = wsinfo.get_ws_dir()
     if wsdir then
@@ -71,16 +85,33 @@ end
 ---@param verified boolean
 ---@return string
 local function _get_breakpoint_sign(bp, verified)
-    -- Determine the sign type based on breakpoint fields
-    local sign
-    if bp.logMessage then
-        sign = verified and _sign_names.logpoint or _sign_names.logpoint_inactive
-    elseif bp.condition or bp.hitCondition then
-        sign = verified and _sign_names.cond_breakpoint or _sign_names.cond_breakpoint_inactive
-    else
-        sign = verified and _sign_names.active_breakpoint or _sign_names.inactive_breakpoint
+    -- Disabled breakpoints
+    if bp.enabled == false then
+        if bp.logMessage then
+            return _sign_names.disabled_logpoint
+        elseif bp.condition or bp.hitCondition then
+            return _sign_names.disabled_cond_breakpoint
+        else
+            return _sign_names.disabled_breakpoint
+        end
     end
-    return sign
+
+    -- Enabled breakpoints
+    local active = verified
+
+    if bp.logMessage then
+        return active
+            and _sign_names.logpoint
+            or _sign_names.inactive_logpoint
+    elseif bp.condition or bp.hitCondition then
+        return active
+            and _sign_names.cond_breakpoint
+            or _sign_names.inactive_cond_breakpoint
+    else
+        return active
+            and _sign_names.active_breakpoint
+            or _sign_names.inactive_breakpoint
+    end
 end
 
 ---@param data loop.debug_ui.Breakpointata
@@ -105,12 +136,40 @@ local function _refresh_breakpoint_sign(id, data)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
-local function _on_breakpoint_added(bp)
+local function _on_breakpoint_set(bp)
     _breakpoints_data[bp.id] = {
         breakpoint = bp,
     }
     local sign = _get_breakpoint_sign(bp, true)
     signsmgr.place_file_sign(bp.id, bp.file, bp.line, _sign_group, sign)
+end
+
+---@param bp loopdebug.SourceBreakpoint
+local function _on_breakpoint_enabled(bp)
+    local data = _breakpoints_data[bp.id]
+    if data then
+        _refresh_breakpoint_sign(bp.id, data)
+    end
+end
+
+---@param bp loopdebug.SourceBreakpoint
+local function _on_breakpoint_disabled(bp)
+    local data = _breakpoints_data[bp.id]
+    if data then
+        _refresh_breakpoint_sign(bp.id, data)
+    end
+end
+
+---@param bp loopdebug.SourceBreakpoint
+---@param old_line number
+local function _on_breakpoint_moved(bp, old_line)
+    local data = _breakpoints_data[bp.id]
+    if not data then
+        return
+    end
+
+    -- Sign is already moved by Neovim; just refresh its appearance
+    _refresh_breakpoint_sign(bp.id, data)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
@@ -171,7 +230,7 @@ local function _enable_breakpoint_sync_on_save()
         { clear = true }
     )
 
-    vim.api.nvim_create_autocmd("BufWritePre", {
+    vim.api.nvim_create_autocmd("BufWritePost", {
         group = group,
         callback = function(ev)
             local bufnr = ev.buf
@@ -189,29 +248,21 @@ local function _enable_breakpoint_sync_on_save()
                 return
             end
             file = vim.fn.fnamemodify(file, ":p")
-            -- Fetch up-to-date sign data
+
+            -- Signs are already moved by Neovim at this point
             local signs_by_id = signsmgr.get_file_signs_by_id(file)
 
-            -- Clear + resync
-            breakpoints.clear_file_breakpoints(file)
-            -- Collect breakpoint signs only
-            local bpsigns = {}
-            for _, sign in pairs(signs_by_id) do
+            for id, sign in pairs(signs_by_id) do
                 if sign.group == _sign_group then
-                    bpsigns[#bpsigns + 1] = sign
+                    -- Update breakpoint line to match sign
+                    breakpoints.update_breakpoint_line(id, sign.lnum)
                 end
-            end
-            -- Sort breakpoints by line number
-            table.sort(bpsigns, function(a, b)
-                return a.lnum < b.lnum
-            end)
-            -- Add breakpoints in order
-            for _, sign in ipairs(bpsigns) do
-                breakpoints.add_breakpoint(file, sign.lnum)
             end
         end,
     })
 end
+
+
 function M.select_breakpoint()
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
@@ -236,6 +287,10 @@ function M.select_breakpoint()
         }
         table.insert(choices, item)
     end
+    table.sort(choices, function(a, b)
+        if a.file ~= b.file then return a.file < b.file end
+        return a.line < b.line
+    end)
     selector.select({
         prompt = "Breakpoints",
         items = choices,
@@ -243,7 +298,7 @@ function M.select_breakpoint()
         callback = function(bp)
             ---@cast bp loopdebug.SourceBreakpoint
             if bp and bp.file then
-            uitools.smart_open_file(bp.file, bp.line, bp.column)
+                uitools.smart_open_file(bp.file, bp.line, bp.column)
             end
         end
     })
@@ -268,7 +323,10 @@ function M.init()
     _enable_breakpoint_sync_on_save()
 
     breakpoints.add_tracker({
-        on_added = _on_breakpoint_added,
+        on_set = _on_breakpoint_set,
+        on_enabled = _on_breakpoint_enabled,
+        on_disabled = _on_breakpoint_disabled,
+        on_moved = _on_breakpoint_moved,
         on_removed = _on_breakpoint_removed,
         on_all_removed = _on_all_breakpoints_removed
     })

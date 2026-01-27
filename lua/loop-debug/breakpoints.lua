@@ -1,10 +1,10 @@
 local M = {}
 
 
-local Trackers    = require("loop.tools.Trackers")
-local uitools     = require("loop.tools.uitools")
-local wsinfo      = require('loop.wsinfo')
-local persistence = require('loop-debug.persistence')
+local Trackers            = require("loop.tools.Trackers")
+local uitools             = require("loop.tools.uitools")
+local wsinfo              = require('loop.wsinfo')
+local persistence         = require('loop-debug.persistence')
 
 ---@class loopdebug.SourceBreakpoint
 ---@field id number
@@ -14,12 +14,15 @@ local persistence = require('loop-debug.persistence')
 ---@field condition string|nil
 ---@field hitCondition string|nil
 ---@field logMessage string|nil
-
+---@field enabled boolean
 
 ---@class loopdebug.breakpoints.Tracker
----@field on_added fun(bp:loopdebug.SourceBreakpoint)|nil
+---@field on_set fun(bp:loopdebug.SourceBreakpoint)|nil
 ---@field on_removed fun(bp:loopdebug.SourceBreakpoint)|nil
 ---@field on_all_removed fun(bpts:loopdebug.SourceBreakpoint[])|nil
+---@field on_enabled fun(bp:loopdebug.SourceBreakpoint)|nil
+---@field on_disabled fun(bp:loopdebug.SourceBreakpoint)|nil
+---@field on_moved fun(bp:loopdebug.SourceBreakpoint,old_line:number)|nil
 
 local _last_breakpoint_id = 1000
 
@@ -27,10 +30,10 @@ local _last_breakpoint_id = 1000
 local _source_breakpoints = {}
 
 ---@type table<number,loopdebug.SourceBreakpoint>
-local _by_id = {} -- breakpoints by unique id
+local _by_id              = {} -- breakpoints by unique id
 
 ---@type loop.tools.Trackers<loopdebug.breakpoints.Tracker>
-local _trackers = Trackers:new()
+local _trackers           = Trackers:new()
 
 ---@param callbacks loopdebug.breakpoints.Tracker
 ---@param no_snapshot boolean?
@@ -45,9 +48,9 @@ function M.add_tracker(callbacks, no_snapshot)
             if a.file ~= b.file then return a.file < b.file end
             return a.line < b.line
         end)
-        if callbacks.on_added then
+        if callbacks.on_set then
             for _, bp in ipairs(current) do
-                callbacks.on_added(bp)
+                callbacks.on_set(bp)
             end
         end
     end
@@ -136,13 +139,16 @@ end
 ---@param condition? string condition
 ---@param hitCondition? string Optional hit condition
 ---@param logMessage? string Optional log message
+---@param enabled? boolean
 ---@return boolean added
-local function _add_source_breakpoint(file, line, condition, hitCondition, logMessage)
+local function _set_source_breakpoint(file, line, condition, hitCondition, logMessage, enabled)
     if _have_source_breakpoint(file, line) then
         return false
     end
     local id = _last_breakpoint_id + 1
     _last_breakpoint_id = id
+
+    if enabled == nil then enabled = true end
 
     ---@type loopdebug.SourceBreakpoint
     local bp = {
@@ -151,7 +157,8 @@ local function _add_source_breakpoint(file, line, condition, hitCondition, logMe
         line = line,
         condition = condition,
         hitCondition = hitCondition,
-        logMessage = logMessage
+        logMessage = logMessage,
+        enabled = enabled
     }
 
     _by_id[id] = bp
@@ -160,7 +167,7 @@ local function _add_source_breakpoint(file, line, condition, hitCondition, logMe
     local lines = _source_breakpoints[file]
     lines[line] = id
 
-    _trackers:invoke("on_added", bp)
+    _trackers:invoke("on_set", bp)
 
     return true
 end
@@ -170,16 +177,16 @@ end
 function M.toggle_breakpoint(file, lnum)
     file = _norm(file)
     if not _remove_source_breakpoint(file, lnum) then
-        _add_source_breakpoint(file, lnum)
+        _set_source_breakpoint(file, lnum)
     end
 end
 
 ---@param file string
 ---@param lnum number
 ---@return boolean
-function M.add_breakpoint(file, lnum)
+function M.set_breakpoint(file, lnum)
     file = _norm(file)
-    return _add_source_breakpoint(file, lnum)
+    return _set_source_breakpoint(file, lnum)
 end
 
 ---@param file string
@@ -189,7 +196,7 @@ function M.set_logpoint(file, lnum, message)
     if type(message) == "string" and #message > 0 then
         file = _norm(file)
         _remove_source_breakpoint(file, lnum)
-        _add_source_breakpoint(file, lnum, nil, nil, message)
+        _set_source_breakpoint(file, lnum, nil, nil, message)
     end
 end
 
@@ -200,7 +207,107 @@ end
 function M.set_cond_breakpoint(file, lnum, condition, hit_condition)
     file = _norm(file)
     _remove_source_breakpoint(file, lnum)
-    _add_source_breakpoint(file, lnum, condition, hit_condition, nil)
+    _set_source_breakpoint(file, lnum, condition, hit_condition, nil)
+end
+
+---@param id number
+---@param enabled boolean
+local function _set_enabled(id, enabled)
+    local bp = _by_id[id]
+    if not bp or bp.enabled == enabled then
+        return false
+    end
+
+    bp.enabled = enabled
+
+    if enabled then
+        _trackers:invoke("on_enabled", bp)
+    else
+        _trackers:invoke("on_disabled", bp)
+    end
+
+    return true
+end
+
+---@param enabled boolean
+local function _set_all_enabled(enabled)
+    for _, bp in pairs(_by_id) do
+        if bp.enabled ~= enabled then
+            bp.enabled = enabled
+            if enabled then
+                _trackers:invoke("on_enabled", bp)
+            else
+                _trackers:invoke("on_disabled", bp)
+            end
+        end
+    end
+end
+
+
+---@param file string
+---@param lnum number
+function M.enable_breakpoint(file, lnum)
+    file = _norm(file)
+    local id = _get_source_breakpoint(file, lnum)
+    if id then
+        return _set_enabled(id, true)
+    end
+    return false
+end
+
+---@param file string
+---@param lnum number
+function M.disable_breakpoint(file, lnum)
+    file = _norm(file)
+    local id = _get_source_breakpoint(file, lnum)
+    if id then
+        return _set_enabled(id, false)
+    end
+    return false
+end
+
+---@param file string
+---@param lnum number
+function M.toggle_breakpoint_enabled(file, lnum)
+    file = _norm(file)
+    local id, bp = _get_source_breakpoint(file, lnum)
+    if id and bp then
+        return _set_enabled(id, not bp.enabled)
+    end
+    return false
+end
+
+function M.enable_all_breakpoints()
+    _set_all_enabled(true)
+end
+
+function M.disable_all_breakpoints()
+    _set_all_enabled(false)
+end
+
+---@param id number
+---@param newline number
+---@return boolean
+function M.update_breakpoint_line(id, newline)
+    local bp = _by_id[id]
+    if not bp or bp.line == newline then
+        return false
+    end
+
+    local old_line = bp.line
+    local file = bp.file
+
+    local lines = _source_breakpoints[file]
+    if lines then
+        lines[old_line] = nil
+        lines[newline] = id
+    end
+
+    bp.line = newline
+
+    _trackers:invoke("on_moved", bp, old_line)
+
+    return true
 end
 
 ---@param file string
@@ -234,7 +341,13 @@ local function _set_breakpoints(breakpoints)
 
     for _, bp in ipairs(breakpoints) do
         local file = vim.fn.fnamemodify(bp.file, ":p")
-        _add_source_breakpoint(file, bp.line, bp.condition, bp.hitCondition, bp.logMessage)
+        _set_source_breakpoint(file,
+            bp.line,
+            bp.condition,
+            bp.hitCondition,
+            bp.logMessage,
+            bp.enabled
+        )
     end
 
     return true, nil
@@ -247,12 +360,22 @@ end
 
 ---@param handler fun(bp:loopdebug.SourceBreakpoint)
 function M.for_each(handler)
-    for _, bp in ipairs(_by_id) do
+    for _, bp in pairs(_by_id) do
         handler(bp)
     end
 end
 
----@param command nil|"toggle"|"logpoint"|"conditional"|"clear_file"|"clear_all"
+---@param command nil
+---| "toggle"
+---| "logpoint"
+---| "conditional"
+---| "enable"
+---| "disable"
+---| "toggle_enabled"
+---| "enable_all"
+---| "disable_all"
+---| "clear_file"
+---| "clear_all"
 function M.breakpoints_command(command)
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
@@ -290,6 +413,33 @@ function M.breakpoints_command(command)
                 end
             end)
         end
+    elseif command == "disable" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            M.disable_breakpoint(file, line)
+        end
+    elseif command == "enable" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            M.enable_breakpoint(file, line)
+        end
+    elseif command == "toggle_enabled" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            M.toggle_breakpoint_enabled(file, line)
+        end
+    elseif command == "disable_all" then
+        uitools.confirm_action("Disable all breakpoints", false, function(accepted)
+            if accepted == true then
+                M.disable_all_breakpoints()
+            end
+        end)
+    elseif command == "enable_all" then
+        uitools.confirm_action("Enable all breakpoints", false, function(accepted)
+            if accepted == true then
+                M.enable_all_breakpoints()
+            end
+        end)
     elseif command == "clear_file" then
         local bufnr = vim.api.nvim_get_current_buf()
         if vim.api.nvim_buf_is_valid(bufnr) then
@@ -308,7 +458,7 @@ function M.breakpoints_command(command)
                 M.clear_all_breakpoints()
             end
         end)
-
+    else
         vim.notify('Invalid breakpoints subcommand: ' .. tostring(command))
     end
 end

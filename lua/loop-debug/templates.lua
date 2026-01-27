@@ -76,7 +76,7 @@ return {
             runInTerminal = true,
             stopOnEntry = false,
             -- Enable nicer C++/Rust formatting
-            sourceLanguages = { "cpp", "rust" },
+            sourceLanguages = { "cpp" },
         }
     },
     {
