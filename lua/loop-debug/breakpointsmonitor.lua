@@ -224,45 +224,6 @@ local function _on_breakpoints_update(sess_id, event)
     end
 end
 
-local function _enable_breakpoint_sync_on_save()
-    local group = vim.api.nvim_create_augroup(
-        "LoopBreakpointSyncOnSave",
-        { clear = true }
-    )
-
-    vim.api.nvim_create_autocmd("BufWritePost", {
-        group = group,
-        callback = function(ev)
-            local bufnr = ev.buf
-            if not vim.api.nvim_buf_is_valid(bufnr) then
-                return
-            end
-
-            -- Skip non-file buffers
-            if vim.bo[bufnr].buftype ~= "" then
-                return
-            end
-
-            local file = vim.api.nvim_buf_get_name(bufnr)
-            if file == "" then
-                return
-            end
-            file = vim.fn.fnamemodify(file, ":p")
-
-            -- Signs are already moved by Neovim at this point
-            local signs_by_id = signsmgr.get_file_signs_by_id(file)
-
-            for id, sign in pairs(signs_by_id) do
-                if sign.group == _sign_group then
-                    -- Update breakpoint line to match sign
-                    breakpoints.update_breakpoint_line(id, sign.lnum)
-                end
-            end
-        end,
-    })
-end
-
-
 function M.select_breakpoint()
     local ws_dir = wsinfo.get_ws_dir()
     if not ws_dir then
@@ -320,7 +281,7 @@ function M.init()
         signsmgr.define_sign(_sign_group, full_name, symbols[name], highlight)
     end
 
-    _enable_breakpoint_sync_on_save()
+    -- TODO: subscribe to signs move / update by signsmgr
 
     breakpoints.add_tracker({
         on_set = _on_breakpoint_set,

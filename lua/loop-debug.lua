@@ -13,8 +13,8 @@ local DEFAULT_CONFIG = {
     stack_levels_limit = 100,
     auto_switch_page = true,
     sign_priority = {
-        breakpoints = 12,
-        currentframe = 13,
+        breakpoints = 80,
+        currentframe = 100,
     },
     symbols = {
         running                  = "▶",
@@ -27,9 +27,9 @@ local DEFAULT_CONFIG = {
         inactive_logpoint        = "◇",
         cond_breakpoint          = "■",
         inactive_cond_breakpoint = "□",
-        disabled_breakpoint      = "⊘", -- circle with slash
-        disabled_logpoint        = "⊗", -- circled X
-        disabled_cond_breakpoint = "⊟", -- square minus
+        disabled_breakpoint      = "⊘",
+        disabled_logpoint        = "⊗",
+        disabled_cond_breakpoint = "⊟",
 
     },
     debuggers = require("loop-debug.debuggers")
