@@ -4,6 +4,7 @@ local M = {}
 local Trackers            = require("loop.tools.Trackers")
 local uitools             = require("loop.tools.uitools")
 local wsinfo              = require('loop.wsinfo')
+local floatwin            = require('loop.tools.floatwin')
 local persistence         = require('loop-debug.persistence')
 
 ---@class loopdebug.SourceBreakpoint
@@ -391,7 +392,7 @@ function M.breakpoints_command(command)
     elseif command == "logpoint" then
         local file, line = uitools.get_current_file_and_line()
         if file and line then
-            vim.ui.input({ prompt = "Enter log message: " }, function(message)
+            floatwin.input_at_cursor({ prompt = "Enter log message: " }, function(message)
                 if message and message ~= "" then
                     M.set_logpoint(file, line, message)
                     print("Logpoint set at " .. file .. ":" .. line)
@@ -401,9 +402,9 @@ function M.breakpoints_command(command)
     elseif command == "conditional" then
         local file, line = uitools.get_current_file_and_line()
         if file and line then
-            vim.ui.input({ prompt = "Condition (empty for none): " }, function(cond)
+            floatwin.input_at_cursor({ prompt = "Condition (empty for none): " }, function(cond)
                 if cond then
-                    vim.ui.input({ prompt = "Hit condition (empty for none): " }, function(hit)
+                    floatwin.input_at_cursor({ prompt = "Hit condition (empty for none): " }, function(hit)
                         if hit then
                             if cond == "" then cond = nil end
                             if hit == "" then hit = nil end

@@ -276,12 +276,18 @@ function M.init()
 
     local symbols = config.current.symbols
 
-    signsmgr.define_sign_group(_sign_group, config.current.sign_priority.breakpoints or 12)
+    signsmgr.define_sign_group(_sign_group, config.current.sign_priority.breakpoints,
+        function(file, signs)
+            for id, sign in pairs(signs) do
+                assert(sign.group == _sign_group)
+                -- Update breakpoint line to match sign
+                breakpoints.update_breakpoint_line(id, sign.lnum)
+            end
+        end)
+
     for name, full_name in pairs(_sign_names) do
         signsmgr.define_sign(_sign_group, full_name, symbols[name], highlight)
     end
-
-    -- TODO: subscribe to signs move / update by signsmgr
 
     breakpoints.add_tracker({
         on_set = _on_breakpoint_set,

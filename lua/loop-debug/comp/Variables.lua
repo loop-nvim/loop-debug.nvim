@@ -269,7 +269,7 @@ function Variables:_load_watch_expressions(context)
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
 
-    self:upsert_item(nil,{ id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
+    self:upsert_item(nil, { id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
 
     if not persistence.is_ws_open() then return end
     local list = persistence.get_config("watch") or {}
@@ -294,6 +294,7 @@ end
 ---@param expr string
 ---@param item_id any
 function Variables:_load_watch_expr_value(context, expr, item_id)
+    local root_id = "w"
     local path = "w/" .. expr
 
     -- Check if we already have this item to preserve existing data during greyout
@@ -313,7 +314,7 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
     if not ds or not ds.frame or not ds.data_providers then
         -- Keep existing data but ensure it is marked as greyed out
         var_item.data.greyout = true
-        self:upsert_item(nil, var_item)
+        self:upsert_item(root_id, var_item)
         return
     end
 
@@ -374,8 +375,8 @@ function Variables:link_to_buffer(comp)
     ---@param item loopdebug.comp.Variables.Item|nil
     local function add_or_edit_watch(item)
         floatwin.input_at_cursor({
-            default_text = item and item.data.name or "",
-            on_confirm = function(expr)
+                default_text = item and item.data.name or "" },
+            function(expr)
                 if not expr or expr == "" then return end
                 if not item then
                     if _add_watch_expr(expr) then
@@ -389,7 +390,7 @@ function Variables:link_to_buffer(comp)
                     end
                 end
             end
-        })
+        )
     end
 
     comp.add_keymap("i", { desc = "Add watch", callback = function() add_or_edit_watch() end })
