@@ -384,7 +384,7 @@ function M.breakpoints_command(command)
         return
     end
     command = command and command:match("^%s*(.-)%s*$") or ""
-    if command == "" or command == "toggle" then
+    if command == "toggle" then
         local file, line = uitools.get_current_file_and_line()
         if file and line then
             M.toggle_breakpoint(file, line)

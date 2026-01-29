@@ -741,7 +741,7 @@ end
 function M.debug_command(command, args, opts)
     if command == "breakpoint" then
         local bp_cmd = args[2]
-        if bp_cmd == "list" then
+        if not bp_cmd or bp_cmd == "" or bp_cmd == "list" then
             breakpointsmonitor.select_breakpoint()
         else
             breakpoints.breakpoints_command(bp_cmd)
