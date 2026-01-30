@@ -16,6 +16,7 @@
 ---@field disabled_breakpoint string
 ---@field disabled_logpoint string
 ---@field disabled_cond_breakpoint string
+---@field variable_value string
 
 ---@class loop-debug.Config
 ---@field stack_levels_limit? number

@@ -14,6 +14,7 @@ local _init_done     = false
 local _query_context = 0
 
 local _locals_ns     = vim.api.nvim_create_namespace("loop-debug-locals")
+local MAX_VALUE_LEN  = 15
 
 local function _remove_locals_virttext()
     -- Clear in all buffers to be safe
@@ -24,57 +25,135 @@ local function _remove_locals_virttext()
     end
 end
 
-local function _find_variable_columns(line_text, var_name)
-    local cols = {}
-    local start = 1
-
-    while true do
-        local s, e = line_text:find("%f[%w_]" .. vim.pesc(var_name) .. "%f[^%w_]", start)
-        if not s then break end
-        table.insert(cols, { s - 1, e - 1 }) -- 0-based cols
-        start = e + 1
+local function _place_variables_virttext(frame, data)
+    if not (data.variables and frame.source and frame.source.path) then
+        return
     end
 
-    return cols
-end
-
-local function _place_variables_virttext(frame, data)
-    if not (frame.source and frame.source.path) then return end
-    if not data.variables then return end
-
-    local bufnr = vim.fn.bufnr(frame.source.path)
+    local bufnr = vim.fn.bufnr(frame.source.path, true)
     if bufnr == -1 then return end
 
     vim.api.nvim_buf_clear_namespace(bufnr, _locals_ns, 0, -1)
 
-    local line = frame.line - 1
-    local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1]
-    if not line_text then return end
+    local lang = vim.treesitter.language.get_lang(vim.bo[bufnr].filetype)
+    local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
+    if not ok or not parser then return end
 
-    for _, var in ipairs(data.variables) do
-        local name  = var.name
-        local value = var.value or "nil"
-        if not name then goto continue end
+    local tree = parser:parse()[1]
+    if not tree then return end
+    local root = tree:root()
 
-        local cols = _find_variable_columns(line_text, name)
+    --------------------------------------------------------------------
+    -- Debugger lookup: name → value
+    --------------------------------------------------------------------
 
-        for _, col in ipairs(cols) do
-            local _, end_col = unpack(col)
+    local dbg_vars = {}
+    for _, v in ipairs(data.variables) do
+        if v.name and v.value then
+            dbg_vars[v.name] = v.value
+        end
+    end
+    if vim.tbl_isempty(dbg_vars) then return end
 
-            vim.api.nvim_buf_set_extmark(bufnr, _locals_ns, line, end_col + 1, {
-                virt_text = {
-                    { " = ", "Comment" },
-                    { value, "Comment" },
-                },
-                virt_text_pos = "inline",
-                hl_mode = "combine",
-            })
+    --------------------------------------------------------------------
+    -- Scope model
+    --------------------------------------------------------------------
+
+    local function new_scope(parent)
+        return {
+            parent = parent,
+            declared = {}, -- name → value
+            shown = {},    -- name → bool
+        }
+    end
+
+    local function lookup(scope, name)
+        while scope do
+            if scope.declared[name] then
+                return scope, scope.declared[name]
+            end
+            scope = scope.parent
+        end
+    end
+
+    --------------------------------------------------------------------
+    -- Language rules (C/C++)
+    --------------------------------------------------------------------
+
+    local SCOPE_NODES = {
+        compound_statement = true, -- { ... }
+        for_statement = true,
+        while_statement = true,
+        if_statement = true,
+        function_definition = true,
+    }
+
+    local DECL_NODES = {
+        init_declarator = true, -- int i = 1
+        declarator = true,      -- int i
+    }
+
+    --------------------------------------------------------------------
+    -- AST walk
+    --------------------------------------------------------------------
+
+    local function visit(node, scope)
+        local t = node:type()
+
+        -- Enter scope
+        if SCOPE_NODES[t] then
+            scope = new_scope(scope)
         end
 
-        ::continue::
-    end
-end
+        -- Declaration: introduce variable into THIS scope
+        if DECL_NODES[t] then
+            for child in node:iter_children() do
+                if child:type() == "identifier" then
+                    local name = vim.treesitter.get_node_text(child, bufnr)
+                    local val = dbg_vars[name]
+                    if val then
+                        scope.declared[name] = val
+                    end
+                end
+            end
+        end
 
+        -- Identifier usage
+        if t == "identifier" then
+            local name = vim.treesitter.get_node_text(node, bufnr)
+            local owner, value = lookup(scope, name)
+
+            if owner and not owner.shown[name] then
+                owner.shown[name] = true
+
+                local display_value = value
+                if #display_value > MAX_VALUE_LEN then
+                    display_value = display_value:sub(1, MAX_VALUE_LEN) .. "…" -- ellipsis
+                end
+
+                local sr, _, _, ec = node:range()
+                vim.api.nvim_buf_set_extmark(bufnr, _locals_ns, sr, ec, {
+                    virt_text = { {
+                        ("%s %s = %s"):format(
+                            config.current.symbols.variable_value,
+                            name,
+                            display_value
+                        ),
+                        "DiagnosticInfo",
+                    } },
+                    virt_text_pos = "eol",
+                    hl_mode = "combine",
+                })
+            end
+        end
+
+        for child in node:iter_children() do
+            visit(child, scope)
+        end
+    end
+
+    visit(root, new_scope(nil))
+end
 
 ---@param view loopdebug.events.CurrentViewUpdate
 local function _place_locals_virttext(view)

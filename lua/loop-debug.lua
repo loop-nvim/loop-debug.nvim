@@ -30,6 +30,7 @@ local DEFAULT_CONFIG = {
         disabled_breakpoint      = "⊘",
         disabled_logpoint        = "⊗",
         disabled_cond_breakpoint = "⊟",
+        variable_value           = "✱"
 
     },
     debuggers = require("loop-debug.debuggers")
