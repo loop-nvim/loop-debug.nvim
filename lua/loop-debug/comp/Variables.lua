@@ -44,27 +44,27 @@ end
 
 ---@param expr string
 ---@return boolean
-local function _add_watch_expr(expr)
+local function _add_expr(expr)
     if not persistence.is_ws_open() then return false end
-    local data = persistence.get_config("watch") or {}
+    local data = persistence.get_config("expr") or {}
     ---@cast data string[]
     for _, v in ipairs(data) do if v == expr then return false end end
     table.insert(data, expr)
-    persistence.set_config("watch", data)
+    persistence.set_config("expr", data)
     return true
 end
 
 ---@param old string
 ---@param new string
 ---@return boolean
-local function _replace_watch_expr(old, new)
-    local data = persistence.get_config("watch")
+local function _replace_expr(old, new)
+    local data = persistence.get_config("expr")
     if not data then return false end
     ---@cast data string[]
     for i, v in ipairs(data) do
         if v == old then
             data[i] = new
-            persistence.set_config("watch", data)
+            persistence.set_config("expr", data)
             return true
         end
     end
@@ -73,14 +73,14 @@ end
 
 ---@param expr string
 ---@return boolean
-local function _remove_watch_expr(expr)
-    local data = persistence.get_config("watch")
+local function _remove_expr(expr)
+    local data = persistence.get_config("expr")
     if not data then return false end
     ---@cast data string[]
     for i, v in ipairs(data) do
         if v == expr then
             table.remove(data, i)
-            persistence.set_config("watch", data)
+            persistence.set_config("expr", data)
             return true
         end
     end
@@ -148,6 +148,7 @@ function Variables:init()
     self._current_data_source = nil
     ---@type table<string, boolean>
     self._layout_cache = {}
+    self._expr_root_id = "x"
 
     self:add_tracker({
         on_toggle = function(_, data, expanded)
@@ -182,7 +183,7 @@ function Variables:_update_data(ctx)
     for _, item in ipairs(items) do item.data.greyout = true end
     self:refresh_content()
 
-    self:_load_watch_expressions(ctx)
+    self:_load_expressions(ctx)
     self:_load_session_vars(ctx)
 end
 
@@ -245,7 +246,8 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_so
 
         local expanded = self._layout_cache[path]
         if expanded == nil then
-            expanded = not (scope.expensive or scope.presentationHint == "globals" or scope.name == "Registers")
+            expanded = not (scope.expensive or scope.presentationHint == "globals"
+                or scope.name == "Registers" or scope.name == "Global" or scope.name == "Static")
         end
 
         ---@type loop.comp.ItemTree.Item
@@ -264,22 +266,23 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_so
 end
 
 ---@param context number
-function Variables:_load_watch_expressions(context)
-    local root_id = "w"
+function Variables:_load_expressions(context)
+    local root_id = self._expr_root_id
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
 
-    self:upsert_item(nil, { id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Watch" } })
+    self:upsert_item(nil,
+        { id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Expressions" } })
 
     if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("watch") or {}
+    local list = persistence.get_config("expr") or {}
     ---@cast list string[]
     local active_ids = {}
 
     for idx, expr in ipairs(list) do
-        local item_id = "watch." .. tostring(idx)
+        local item_id = "expr." .. tostring(idx)
         active_ids[item_id] = true
-        self:_load_watch_expr_value(context, expr, item_id)
+        self:_load_expr_value(context, root_id, expr, item_id)
     end
 
     local children = self:get_children(root_id)
@@ -293,9 +296,8 @@ end
 ---@param context number
 ---@param expr string
 ---@param item_id any
-function Variables:_load_watch_expr_value(context, expr, item_id)
-    local root_id = "w"
-    local path = "w/" .. expr
+function Variables:_load_expr_value(context, parent_id, expr, item_id)
+    local path = parent_id .. "/" .. expr
 
     -- Check if we already have this item to preserve existing data during greyout
     local existing = self:get_item(item_id)
@@ -303,7 +305,6 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
     ---@type loopdebug.comp.Variables.Item
     local var_item = {
         id = item_id,
-        parent_id = "w",
         expanded = self._layout_cache[path],
         data = existing and existing.data or { path = path, is_expr = true, name = expr }
     }
@@ -314,12 +315,12 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
     if not ds or not ds.frame or not ds.data_providers then
         -- Keep existing data but ensure it is marked as greyed out
         var_item.data.greyout = true
-        self:upsert_item(root_id, var_item)
+        self:upsert_item(parent_id, var_item)
         return
     end
 
     ds.data_providers.evaluate_provider({
-        expression = expr, frameId = ds.frame.id, context = 'watch',
+        expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
         if self._query_context ~= context then return end
         if err or not data then
@@ -337,7 +338,7 @@ function Variables:_load_watch_expr_value(context, expr, item_id)
                 end
             end
         end
-        self:upsert_item(nil, var_item)
+        self:upsert_item(parent_id, var_item)
     end)
 end
 
@@ -379,37 +380,37 @@ function Variables:link_to_buffer(comp)
             function(expr)
                 if not expr or expr == "" then return end
                 if not item then
-                    if _add_watch_expr(expr) then
+                    if _add_expr(expr) then
                         -- ONLY reload watches
-                        self:_load_watch_expressions(self._query_context)
+                        self:_load_expressions(self._query_context)
                     end
                 elseif expr ~= item.data.name then
-                    if _replace_watch_expr(item.data.name, expr) then
+                    if _replace_expr(item.data.name, expr) then
                         -- ONLY reload watches
-                        self:_load_watch_expressions(self._query_context)
+                        self:_load_expressions(self._query_context)
                     end
                 end
             end
         )
     end
 
-    comp.add_keymap("i", { desc = "Add watch", callback = function() add_or_edit_watch() end })
+    comp.add_keymap("i", { desc = "Add Expression", callback = function() add_or_edit_watch() end })
     comp.add_keymap("c", {
-        desc = "Edit watch",
+        desc = "Edit Expression",
         callback = function()
             local cur = self:get_cur_item(comp)
             if cur and cur.data.is_expr then add_or_edit_watch(cur) end
         end
     })
     comp.add_keymap("d", {
-        desc = "Delete watch",
+        desc = "Delete Expression",
         callback = function()
             local cur = self:get_cur_item(comp)
             if cur and cur.data.is_expr then
-                _remove_watch_expr(cur.data.name)
+                _remove_expr(cur.data.name)
                 self:remove_item(cur.id)
                 -- ONLY reload watches to sync indices
-                self:_load_watch_expressions(self._query_context)
+                self:_load_expressions(self._query_context)
             end
         end
     })
