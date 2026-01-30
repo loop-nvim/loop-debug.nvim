@@ -1,28 +1,25 @@
 ---@class loop.signs
-local M              = {}
+local M                    = {}
 
-local debugevents    = require('loop-debug.debugevents')
-local signsmgr       = require('loop.signsmgr')
-local config         = require("loop-debug.config")
-local filetools      = require('loop.tools.file')
-local uitools        = require('loop.tools.uitools')
+local debugevents          = require('loop-debug.debugevents')
+local signsmgr             = require('loop.signsmgr')
+local extmarks             = require('loop.extmarks')
+local config               = require("loop-debug.config")
+local filetools            = require('loop.tools.file')
+local uitools              = require('loop.tools.uitools')
 
-local _sign_group    = "currentframe"
-local _sign_name     = "currentframe"
+local _sign_group          = "currentframe"
+local _sign_name           = "currentframe"
 
-local _init_done     = false
-local _query_context = 0
+local _init_done           = false
+local _query_context       = 0
 
-local _locals_ns     = vim.api.nvim_create_namespace("loop-debug-locals")
-local MAX_VALUE_LEN  = 15
+local MAX_VALUE_LEN        = 15
+local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
+local _vars_extmark_id = 0
 
 local function _remove_locals_virttext()
-    -- Clear in all buffers to be safe
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.api.nvim_buf_is_loaded(buf) then
-            vim.api.nvim_buf_clear_namespace(buf, _locals_ns, 0, -1)
-        end
-    end
+    _vars_extmarks_group.remove_extmarks()
 end
 
 local function _place_variables_virttext(frame, data)
@@ -33,7 +30,7 @@ local function _place_variables_virttext(frame, data)
     local bufnr = vim.fn.bufnr(frame.source.path, true)
     if bufnr == -1 then return end
 
-    vim.api.nvim_buf_clear_namespace(bufnr, _locals_ns, 0, -1)
+    _vars_extmarks_group.remove_extmarks()
 
     local lang = vim.treesitter.language.get_lang(vim.bo[bufnr].filetype)
     local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
@@ -132,7 +129,9 @@ local function _place_variables_virttext(frame, data)
                 end
 
                 local sr, _, _, ec = node:range()
-                vim.api.nvim_buf_set_extmark(bufnr, _locals_ns, sr, ec, {
+                _vars_extmark_id = _vars_extmark_id + 1
+                local id = _vars_extmark_id
+                _vars_extmarks_group.place_file_extmark(id, frame.source.path, sr, ec, {
                     virt_text = { {
                         ("%s %s = %s"):format(
                             config.current.symbols.variable_value,
