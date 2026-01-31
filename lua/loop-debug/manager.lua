@@ -527,12 +527,17 @@ end
 ---@return boolean, string|nil
 local function _process_select_session_command(jobdata)
     local choices = {}
+    local initial
     for sess_id, sess_data in pairs(jobdata.session_data) do
         table.insert(choices, { label = sess_data.sess_name, data = sess_id })
+        if sess_id == jobdata.current_session_id then
+            initial = #choices
+        end
     end
     selector.select({
         prompt = "Select debug session",
         items = choices,
+        initial = initial,
         callback = function(sess_id)
             if sess_id then _switch_to_session(jobdata, sess_id) end
         end
@@ -554,15 +559,20 @@ local function _process_select_thread_command(jobdata)
                 vim.notify("Failed to load thread list: " .. (err or ""))
             else
                 local choices = {}
+                local initial
                 for _, thread in pairs(data.threads) do
                     table.insert(choices, {
                         label = tostring(thread.id) .. ": " .. tostring(thread.name),
                         data = thread.id
                     })
+                    if thread.id == sess_data.cur_thread_id then
+                        initial = #choices
+                    end
                 end
                 selector.select({
                     prompt = "Select thread",
                     items = choices,
+                    initial = initial,
                     callback = function(thread_id)
                         if thread_id and sess_id == jobdata.current_session_id then
                             _switch_to_thread(jobdata, sess_id, thread_id, true)
@@ -592,12 +602,26 @@ local function _process_select_frame_command(jobdata)
                 vim.notify("Failed to load call stack: " .. (err or ""))
             else
                 local choices = {}
+                local initial
                 for _, frame in pairs(data.stackFrames) do
                     table.insert(choices, { label = tostring(frame.name), data = frame })
+                    if sess_data.cur_frame and frame.id == sess_data.cur_frame.id then
+                        initial = #choices
+                    end
+                end
+                if not initial then
+                    for idx, frame in pairs(data.stackFrames) do
+                        if sess_data.cur_frame and frame.name == sess_data.cur_frame.name
+                            and frame.moduleId == sess_data.cur_frame.moduleId
+                            and frame.line == sess_data.cur_frame.line then
+                            initial = idx
+                        end
+                    end
                 end
                 selector.select({
                     prompt = "Select frame",
                     items = choices,
+                    initial = initial,
                     callback = function(frame)
                         if frame and sess_id == jobdata.current_session_id and thread_id == sess_data.cur_thread_id then
                             _switch_to_frame(jobdata, frame, true)
