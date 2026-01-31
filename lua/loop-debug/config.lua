@@ -7,6 +7,7 @@
 ---@field paused string
 ---@field success string
 ---@field failure string
+---@field debug_frame string
 ---@field active_breakpoint string
 ---@field inactive_breakpoint string
 ---@field logpoint string
