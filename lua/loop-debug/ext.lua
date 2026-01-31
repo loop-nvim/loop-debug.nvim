@@ -7,8 +7,8 @@ local extension =
 {
     on_workspace_load = function(ext_data)
         persistence.on_workspace_load(ext_data.state)
-        ext_data.register_user_command("debug", cmd_provider)
-        ext_data.register_task_type("debug", task_provider.get_task_type_provider())
+        ext_data.register_user_command("debug", cmd_provider.get_cmd_provider(ext_data))
+        ext_data.register_task_type("debug", task_provider.get_task_type_provider(ext_data))
         ext_data.register_task_templates("Debug", task_provider.get_task_template_provider())
     end,
     on_workspace_unload = function(_)

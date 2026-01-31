@@ -4,7 +4,6 @@ local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
 local manager = require('loop-debug.manager')
 local breakpoints = require('loop-debug.breakpoints')
-local wsinfo = require('loop.wsinfo')
 local fntools = require('loop.tools.fntools')
 local logs = require('loop.logs')
 
@@ -51,8 +50,9 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
 end
 
 
----@type fun(task:loopdebug.Task,page_manager:loop.PageManager, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
-function M.start_debug_task(task, page_manager, on_exit)
+---@type fun(ws_dir:string,task:loopdebug.Task,page_manager:loop.PageManager, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
+function M.start_debug_task(ws_dir, task, page_manager, on_exit)
+    assert(type(ws_dir) == "string")
     -- Early validation
     if not task or type(task) ~= "table" then
         return nil, "task is required and must be a table"
@@ -71,11 +71,6 @@ function M.start_debug_task(task, page_manager, on_exit)
     local debugger = config.current.debuggers[task.debugger]
     if not debugger then
         return nil, ("no debugger config found for task.debugger '%s'"):format(tostring(task.debugger))
-    end
-
-    local ws_dir = wsinfo.get_ws_dir()
-    if not ws_dir then
-        return nil, "failed to read workspace dir"
     end
 
     ---- debug adapter config ---

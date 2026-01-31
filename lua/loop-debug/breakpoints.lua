@@ -3,7 +3,6 @@ local M = {}
 
 local Trackers            = require("loop.tools.Trackers")
 local uitools             = require("loop.tools.uitools")
-local wsinfo              = require('loop.wsinfo')
 local floatwin            = require('loop.tools.floatwin')
 local persistence         = require('loop-debug.persistence')
 
@@ -378,11 +377,6 @@ end
 ---| "clear_file"
 ---| "clear_all"
 function M.breakpoints_command(command)
-    local ws_dir = wsinfo.get_ws_dir()
-    if not ws_dir then
-        vim.notify('No active workspace')
-        return
-    end
     command = command and command:match("^%s*(.-)%s*$") or ""
     if command == "" or command == "toggle" then
         local file, line = uitools.get_current_file_and_line()

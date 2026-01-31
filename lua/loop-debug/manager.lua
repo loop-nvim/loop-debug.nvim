@@ -738,11 +738,12 @@ end
 ---@param command loop.job.DebugJob.Command|nil
 ---@param args string[]
 ---@param opts vim.api.keyset.create_user_command.command_args
-function M.debug_command(command, args, opts)
+---@param wsdir string
+function M.debug_command(command, args, opts, wsdir)
     if command == "breakpoint" then
         local bp_cmd = args[2]
         if bp_cmd == "list" then
-            breakpointsmonitor.select_breakpoint()
+            breakpointsmonitor.select_breakpoint(wsdir)
         else
             breakpoints.breakpoints_command(bp_cmd)
         end

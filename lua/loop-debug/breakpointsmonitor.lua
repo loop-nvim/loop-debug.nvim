@@ -3,7 +3,6 @@ local signsmgr      = require('loop.signsmgr')
 local breakpoints   = require('loop-debug.breakpoints')
 local debugevents   = require('loop-debug.debugevents')
 local selector      = require("loop.tools.selector")
-local wsinfo        = require("loop.wsinfo")
 local uitools       = require("loop.tools.uitools")
 
 local M             = {}
@@ -35,7 +34,8 @@ local _breakpoints_data = {}
 
 ---@param bp loopdebug.SourceBreakpoint
 ---@param verified boolean
-local function _format_breakpoint(bp, verified)
+---@param wsdir string
+local function _format_breakpoint(bp, verified, wsdir)
     local symbols = config.current.symbols
 
     local symbol
@@ -59,10 +59,7 @@ local function _format_breakpoint(bp, verified)
     end
 
     local file = bp.file
-    local wsdir = wsinfo.get_ws_dir()
-    if wsdir then
-        file = vim.fs.relpath(wsdir, file) or file
-    end
+    file = vim.fs.relpath(wsdir, file) or file
     local parts = { symbol }
     table.insert(parts, " ")
     table.insert(parts, file)
@@ -224,8 +221,8 @@ local function _on_breakpoints_update(sess_id, event)
     end
 end
 
-function M.select_breakpoint()
-    local ws_dir = wsinfo.get_ws_dir()
+---@param ws_dir string
+function M.select_breakpoint(ws_dir)
     if not ws_dir then
         vim.notify('No active workspace')
         return
@@ -241,7 +238,7 @@ function M.select_breakpoint()
         local bpdata = _breakpoints_data[bp.id]
         local verified = bpdata and _get_breakpoint_state(bpdata) or false
         local item = {
-            label = _format_breakpoint(bp, verified),
+            label = _format_breakpoint(bp, verified, ws_dir),
             file = bp.file,
             line = bp.line,
             data = bp,

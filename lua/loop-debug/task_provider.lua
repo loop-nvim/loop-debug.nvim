@@ -2,7 +2,8 @@ local M = {}
 
 local run = require('loop-debug.run')
 
-function M.get_task_type_provider()
+---@param ext_data loop.ExtensionData
+function M.get_task_type_provider(ext_data)
     ---@type loop.TaskTypeProvider
     return
     {
@@ -10,7 +11,10 @@ function M.get_task_type_provider()
             local schema = require('loop-debug.schema')
             return schema
         end,
-        start_one_task = run.start_debug_task,
+        start_one_task = function(task, page_manager, on_exit)
+            ---@cast task loopdebug.Task
+            return run.start_debug_task(ext_data.ws_dir, task, page_manager, on_exit)
+        end,
         on_tasks_cleanup = function()
             --ui.hide()
         end,
