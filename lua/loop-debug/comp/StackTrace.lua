@@ -8,72 +8,48 @@ local Trackers = require("loop.tools.Trackers")
 ---@field new fun(self: loopdebug.comp.StackTrace, name:string): loopdebug.comp.StackTrace
 local StackTrace = class(ItemListComp)
 
----@param highlights loop.Highlight[]
-local function _item_formatter(id, data, highlights)
-    ---@type loop.Highlight[]
-    local hls = {}
+---@param id any
+---@param data table
+---@return loop.comp.ItemList.Chunk[]
+local function _item_formatter(id, data)
+    local chunks = {}
 
     local frame = data.frame
     if not frame then
-        table.insert(highlights, { group = data.greyout and "NonText" or "Directory"})
-        return data.text
+        table.insert(chunks, {
+            text = tostring(data.text or ""),
+            highlight = data.greyout and "NonText" or "Directory"
+        })
+        return chunks
     end
 
-    local parts = {}
-    local pos = 0
-
     -- function name
-    local name_str = tostring(frame.name)
-    table.insert(parts, name_str)
-    table.insert(hls, { group = "@function", start_col = pos, end_col = pos + #name_str })
-    pos = pos + #name_str
+    table.insert(chunks, { text = tostring(frame.name), highlight = "@function" })
 
     if frame.source and frame.source.name then
-        local sep2 = " - "
-        table.insert(parts, sep2)
-        pos = pos + #sep2
-
-        local source_str = tostring(frame.source.name)
-        table.insert(parts, source_str)
-        table.insert(hls, { group = "@module", start_col = pos, end_col = pos + #source_str })
-        pos = pos + #source_str
+        table.insert(chunks, { text = " - " }) -- separator
+        table.insert(chunks, { text = tostring(frame.source.name), highlight = "@module" })
 
         if frame.line then
-            -- colon before line number
-            local sep_line = ":"
-            table.insert(parts, sep_line)
-            pos = pos + #sep_line
-
-            local line_str = tostring(frame.line)
-            table.insert(parts, line_str)
-            table.insert(hls, { group = "@number", start_col = pos, end_col = pos + #line_str })
-            pos = pos + #line_str
+            table.insert(chunks, { text = ":" })
+            table.insert(chunks, { text = tostring(frame.line), highlight = "@number" })
 
             if frame.column then
-                -- colon before column number
-                local sep_col = ":"
-                table.insert(parts, sep_col)
-                pos = pos + #sep_col
-
-                local col_str = tostring(frame.column)
-                table.insert(parts, col_str)
-                table.insert(hls, { group = "@number", start_col = pos, end_col = pos + #col_str })
-                pos = pos + #col_str
+                table.insert(chunks, { text = ":" })
+                table.insert(chunks, { text = tostring(frame.column), highlight = "@number" })
             end
         end
     end
 
+    -- apply greyout if needed
     if data.greyout then
-        table.insert(highlights, { group = "NonText" })
-    else
-        for _, hl in ipairs(hls) do
-            table.insert(highlights, hl)
+        for _, chunk in ipairs(chunks) do
+            chunk.highlight = "NonText"
         end
     end
 
-    return table.concat(parts, '')
+    return chunks
 end
-
 
 function StackTrace:init()
     ItemListComp.init(self, {
@@ -157,6 +133,15 @@ function StackTrace:_update_data(view)
                     local item = { id = idx, data = { frame = frame } }
                     table.insert(items, item)
                     if view.frame and frame.id == view.frame.id then cur_item_id = item.id end
+                end
+                if not cur_item_id and view.frame then
+                    for idx, frame in ipairs(resp.stackFrames) do
+                        if frame.name == view.frame.name
+                            and frame.moduleId == view.frame.moduleId
+                            and frame.line == view.frame.line then
+                            cur_item_id = idx
+                        end
+                    end
                 end
             end
             self:set_items(items)

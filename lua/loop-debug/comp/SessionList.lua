@@ -7,14 +7,23 @@ local debugevents = require('loop-debug.debugevents')
 ---@field new fun(self: loopdebug.comp.SessionListComp): loopdebug.comp.SessionListComp
 local SessionListComp = class(ItemList)
 
----@param highlights loop.Highlight[]
-local function _item_formatter(id, data, highlights)
-    local str = data.label
+---@param id any
+---@param data table
+---@return loop.comp.ItemList.Chunk[]
+local function _item_formatter(id, data)
+    local chunks = {}
+
+    -- Main label
+    table.insert(chunks, { text = tostring(data.label), highlight = nil })
+
+    -- Optional paused threads info
     if data.nb_paused_threads and data.nb_paused_threads > 0 then
         local s = data.nb_paused_threads > 1 and "s" or ""
-        str = str .. (" ( %d paused thread%s)"):format(data.nb_paused_threads, s)
+        local paused_text = (" (%d paused thread%s)"):format(data.nb_paused_threads, s)
+        table.insert(chunks, { text = paused_text, highlight = "Comment" })
     end
-    return str
+
+    return chunks
 end
 
 function SessionListComp:init()
@@ -107,7 +116,7 @@ function SessionListComp:_refresh()
     for _, sess_id in ipairs(session_ids) do
         local info = self._sessions[sess_id]
         local nb_paused_threads = info.nb_paused_threads
-		local flag
+        local flag
         if nb_paused_threads and nb_paused_threads > 0 then
             flag = symbols.paused
         else

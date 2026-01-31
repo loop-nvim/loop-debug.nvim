@@ -457,10 +457,10 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
     end
 
     if debuggee_output_ctrl then
-        local highlights = (category == "stderr") and { { group = "ErrorMsg" } } or nil
+        --local highlight = (category == "stderr") and "ErrorMsg" or nil -- TODO
         for line in output:gmatch("([^\r\n]*)\r?\n?") do
             if line ~= "" then
-                debuggee_output_ctrl.add_lines(line, highlights)
+                debuggee_output_ctrl.add_lines(line)
             end
         end
     end

@@ -7,7 +7,7 @@ local MAX_INSPECT_BYTES = 512
 ---@return string|nil expr
 ---@return string|nil err
 function M.get_value_for_inspect(opts)
-    local expr = vim.fn.expand("<cexpr>")
+    local expr = vim.fn.expand("<cword>")
     if expr == "" then
         return nil, "no expression under cursor"
     elseif #expr > MAX_INSPECT_BYTES then

@@ -101,41 +101,59 @@ local _var_kind_to_hl_group = {
 
 ---@param id any
 ---@param data any
----@return string, loop.Highlight[]?
+---@return { text:string, highlight:string?, virt_text:string? }[]
 local function _variable_node_formatter(id, data)
-    ---@type loop.Highlight[]
-    local highlights = {}
-    if not data then return "" end
-    if data.is_na and not data.name then
-        table.insert(highlights, { group = "NonText" })
-        return "not available"
+    if not data then
+        return {}
     end
 
-    local hl = data.greyout and "NonText" or nil
+    -- not available
+    if data.is_na and not data.name then
+        return {
+            { text = "not available", highlight = "NonText" },
+        }
+    end
 
+    local base_hl = data.greyout and "NonText" or nil
+
+    -- scope label (single segment)
     if data.scopelabel then
-        table.insert(highlights, { group = hl or "Directory" })
-        return data.scopelabel
+        return {
+            { text = data.scopelabel, highlight = base_hl or "Directory" },
+        }
     end
 
     local name = tostring(data.name or "unknown")
-    local value = daptools.format_variable(tostring(data.value or ""), data.presentationHint)
+    local value = daptools.format_variable(
+        tostring(data.value or ""),
+        data.presentationHint
+    )
+
     local preview, _ = _preview_string(value, vim.o.columns - 20)
 
-    table.insert(highlights, { group = hl or "@symbol", start_col = 0, end_col = #name })
+    -- name
+    local chunks = {
+        { text = name, highlight = base_hl or "@symbol" },
+        { text = ": ", highlight = base_hl or "NonText" },
+    }
 
-    local start = #name
-    table.insert(highlights, { group = hl or "NonText", start_col = start, end_col = start + 2 })
+    -- value highlight
+    local hl = base_hl
+    if data.is_na then
+        hl = "NonText"
+    end
 
-    if data.is_na then hl = "NonText" end
-
-    start = start + 2
     local kind = data.presentationHint and data.presentationHint.kind
     local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
-    table.insert(highlights, { group = val_hl, start_col = start, end_col = start + #preview })
 
-    return (name .. ': ' .. preview), highlights
+    table.insert(chunks, {
+        text = preview,
+        highlight = val_hl,
+    })
+
+    return chunks
 end
+
 
 function Variables:init()
     ItemTreeComp.init(self, {
