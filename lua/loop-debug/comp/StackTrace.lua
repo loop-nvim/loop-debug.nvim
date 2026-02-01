@@ -106,9 +106,21 @@ end
 ---@param view loopdebug.events.CurrentViewUpdate
 function StackTrace:_update_data(view)
     if not view.thread_id then
+        --defer to avoid flickering
+        vim.defer_fn(function()
+                local items = self:get_items()
+                for _, item in ipairs(items) do
+                    if item.data.greyout_pending then
+                        item.data.greyout = true
+                        item.data.greyout_pending = false
+                    end
+                end
+                self:refresh_content()
+            end,
+            config.current.anti_flicker_delay)
         local items = self:get_items()
         for _, item in ipairs(items) do
-            item.data.greyout = true
+            item.data.greyout_pending = true
         end
         self:refresh_content()
         return

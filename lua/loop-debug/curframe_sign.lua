@@ -1,12 +1,21 @@
 ---@class loop.signs
-local M                    = {}
+local M           = {}
 
-local debugevents          = require('loop-debug.debugevents')
-local loopsigns            = require('loop.signs')
-local extmarks             = require('loop.extmarks')
-local config               = require("loop-debug.config")
-local filetools            = require('loop.tools.file')
-local uitools              = require('loop.tools.uitools')
+local debugevents = require('loop-debug.debugevents')
+local loopsigns   = require('loop.signs')
+local extmarks    = require('loop.extmarks')
+local config      = require("loop-debug.config")
+local filetools   = require('loop.tools.file')
+local uitools     = require('loop.tools.uitools')
+
+do
+    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'DiagnosticInfo' })
+    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'FloatBorder' })
+    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'NormalFloat' })
+    vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'Visual' })
+    local pill = vim.api.nvim_get_hl(0, { name = 'LoopDebugVarPill', link = false })
+    vim.api.nvim_set_hl(0, 'LoopDebugVarPillSep', { fg = pill.bg, bg = 'NONE' })
+end
 
 ---@type loop.signs.Group
 local _sign_group
@@ -23,11 +32,12 @@ local _vars_extmark_id     = 0
 local _vars_clear_timer
 local function _remove_locals_virttext()
     if not _vars_clear_timer then
-        --defer for a 0.5 second to avoid flickering
+        --defer to avoid flickering
         _vars_clear_timer = vim.defer_fn(function()
+                _vars_clear_timer = nil
                 _vars_extmarks_group.remove_extmarks()
             end,
-            3000)
+            config.current.anti_flicker_delay)
     end
 end
 
@@ -157,7 +167,11 @@ local function _place_variables_virttext(frame, data)
 
         _vars_extmark_id = _vars_extmark_id + 1
         _vars_extmarks_group.place_file_extmark(_vars_extmark_id, filepath, sr + 1, 0, {
-            virt_text     = { { " ", "" }, { text, "DiagnosticFloatingHint" } },
+            virt_text     = {
+                { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
+                { name .. ": " .. display, "LoopDebugVarPill" },
+                { "", "LoopDebugVarPillSep" }, -- right rounded cap
+            },
             virt_text_pos = "eol",
             hl_mode       = "combine",
         })
@@ -253,7 +267,9 @@ function M.init()
             local frame = view.frame
             if not (frame and frame.source and frame.source.path) then
                 _sign_group.remove_signs()
-                _remove_locals_virttext()
+                if config.current.enable_inlay_variables then
+                    _remove_locals_virttext()
+                end
                 return
             end
             if not filetools.file_exists(frame.source.path) then return end
@@ -261,9 +277,10 @@ function M.init()
             local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
             -- Place sign for current frame
             _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
-
-            _cancel_deferred_remove_locals_virttext()
-            _place_locals_virttext(view)
+            if config.current.enable_inlay_variables then
+                _cancel_deferred_remove_locals_virttext()
+                _place_locals_virttext(view)
+            end
         end
     })
 end

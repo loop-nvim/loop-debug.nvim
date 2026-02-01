@@ -1,6 +1,7 @@
 local class        = require('loop.tools.class')
 local floatwin     = require('loop.tools.floatwin')
 local ItemTreeComp = require('loop.comp.ItemTree')
+local config       = require('loop-debug.config')
 local persistence  = require('loop-debug.persistence')
 local daptools     = require('loop-debug.dap.daptools')
 local debugevents  = require('loop-debug.debugevents')
@@ -197,8 +198,21 @@ end
 
 ---@param ctx number
 function Variables:_update_data(ctx)
+    --defer to avoid flickering
+    vim.defer_fn(function()
+            local items = self:get_items()
+            for _, item in ipairs(items) do
+                if item.data.greyout_pending then
+                    item.data.greyout = true
+                    item.data.greyout_pending = false
+                end
+            end
+            self:refresh_content()
+        end,
+        config.current.anti_flicker_delay)
+
     local items = self:get_items()
-    for _, item in ipairs(items) do item.data.greyout = true end
+    for _, item in ipairs(items) do item.data.greyout_pending = true end
     self:refresh_content()
 
     self:_load_expressions(ctx)
@@ -294,20 +308,10 @@ function Variables:_load_expressions(context)
 
     if not persistence.is_ws_open() then return end
     local list = persistence.get_config("expr") or {}
-    ---@cast list string[]
-    local active_ids = {}
 
     for idx, expr in ipairs(list) do
-        local item_id = "expr." .. tostring(idx)
-        active_ids[item_id] = true
+        local item_id = root_id .. "/" .. tostring(idx)
         self:_load_expr_value(context, root_id, expr, item_id)
-    end
-
-    local children = self:get_children(root_id)
-    for _, child in ipairs(children) do
-        if not active_ids[child.id] then
-            self:remove_item(child.id)
-        end
     end
 end
 
@@ -315,6 +319,11 @@ end
 ---@param expr string
 ---@param item_id any
 function Variables:_load_expr_value(context, parent_id, expr, item_id)
+    local ds = self._current_data_source
+    if not ds or not ds.frame or not ds.data_providers then
+        return
+    end
+
     local path = parent_id .. "/" .. expr
 
     -- Check if we already have this item to preserve existing data during greyout
@@ -326,16 +335,9 @@ function Variables:_load_expr_value(context, parent_id, expr, item_id)
         expanded = self._layout_cache[path],
         data = existing and existing.data or { path = path, is_expr = true, name = expr }
     }
+
     -- Ensure the name is correct if it was renamed
     var_item.data.name = expr
-
-    local ds = self._current_data_source
-    if not ds or not ds.frame or not ds.data_providers then
-        -- Keep existing data but ensure it is marked as greyed out
-        var_item.data.greyout = true
-        self:upsert_item(parent_id, var_item)
-        return
-    end
 
     ds.data_providers.evaluate_provider({
         expression = expr, frameId = ds.frame.id, context = "watch",
@@ -345,11 +347,13 @@ function Variables:_load_expr_value(context, parent_id, expr, item_id)
             var_item.data.value = "not available"
             var_item.data.is_na = true
             var_item.data.greyout = false
+            var_item.data.greyout_pending = false
         else
             var_item.data.value = data.result
             var_item.data.presentationHint = data.presentationHint
             var_item.data.is_na = false
             var_item.data.greyout = false
+            var_item.data.greyout_pending = false
             if data.variablesReference and data.variablesReference > 0 then
                 var_item.children_callback = function(cb)
                     self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, path, cb)

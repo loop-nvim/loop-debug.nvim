@@ -21,9 +21,11 @@
 
 ---@class loop-debug.Config
 ---@field stack_levels_limit? number
+---@field anti_flicker_delay? number
+---@field enable_inlay_variables? boolean
 ---@field sign_priority? loop-debug.Config.SignPriority
----@field symbols loop-debug.Config.Symbols
----@field debuggers table<string,loopdebug.Config.Debugger>
+---@field symbols? loop-debug.Config.Symbols
+---@field debuggers? table<string,loopdebug.Config.Debugger>
 
 local M = {}
 
