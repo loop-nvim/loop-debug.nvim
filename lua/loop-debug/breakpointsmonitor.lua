@@ -1,5 +1,5 @@
 local config        = require('loop-debug.config')
-local signsmgr      = require('loop.signsmgr')
+local loopsigns     = require('loop.signs')
 local breakpoints   = require('loop-debug.breakpoints')
 local debugevents   = require('loop-debug.debugevents')
 local selector      = require("loop.tools.selector")
@@ -10,7 +10,8 @@ local M             = {}
 local _init_done    = false
 local _init_err_msg = "init() not called"
 
-local _sign_group   = "breakpoints"
+---@type loop.signs.Group
+local _sign_group
 
 local _sign_names   = {
     active_breakpoint        = "active_breakpoint",
@@ -129,7 +130,7 @@ end
 local function _refresh_breakpoint_sign(id, data)
     local verified = _get_breakpoint_state(data)
     local sign = _get_breakpoint_sign(data.breakpoint, verified)
-    signsmgr.place_file_sign(id, data.breakpoint.file, data.breakpoint.line, _sign_group, sign)
+    _sign_group.place_file_sign(id, data.breakpoint.file, data.breakpoint.line, sign)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
@@ -138,7 +139,7 @@ local function _on_breakpoint_set(bp)
         breakpoint = bp,
     }
     local sign = _get_breakpoint_sign(bp, true)
-    signsmgr.place_file_sign(bp.id, bp.file, bp.line, _sign_group, sign)
+    _sign_group.place_file_sign(bp.id, bp.file, bp.line, sign)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
@@ -172,7 +173,7 @@ end
 ---@param bp loopdebug.SourceBreakpoint
 local function _on_breakpoint_removed(bp)
     _breakpoints_data[bp.id] = nil
-    signsmgr.remove_file_sign(bp.id, _sign_group)
+    _sign_group.remove_file_sign(bp.id)
 end
 
 ---@param removed loopdebug.SourceBreakpoint[]
@@ -183,7 +184,7 @@ local function _on_all_breakpoints_removed(removed)
         files[bp.file] = true
     end
     for file, _ in pairs(files) do
-        signsmgr.remove_file_signs(file, _sign_group)
+        _sign_group.remove_file_signs(file)
     end
 end
 
@@ -273,17 +274,16 @@ function M.init()
 
     local symbols = config.current.symbols
 
-    signsmgr.define_sign_group(_sign_group, config.current.sign_priority.breakpoints,
+    _sign_group = loopsigns.define_group("Breakpoints", {priority = config.current.sign_priority.breakpoints},
         function(file, signs)
             for id, sign in pairs(signs) do
-                assert(sign.group == _sign_group)
                 -- Update breakpoint line to match sign
                 breakpoints.update_breakpoint_line(id, sign.lnum)
             end
         end)
 
     for name, full_name in pairs(_sign_names) do
-        signsmgr.define_sign(_sign_group, full_name, symbols[name], highlight)
+        _sign_group.define_sign(full_name, symbols[name], highlight)
     end
 
     breakpoints.add_tracker({
