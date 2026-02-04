@@ -102,26 +102,27 @@ local _var_kind_to_hl_group = {
 
 ---@param id any
 ---@param data any
----@return { text:string, highlight:string?, virt_text:string? }[]
+---@return string[][], string[][]
 local function _variable_node_formatter(id, data)
     if not data then
-        return {}
+        return {}, {}
     end
+
+    local text_chunks = {}
+    local virt_chunks = {}
 
     -- not available
     if data.is_na and not data.name then
-        return {
-            { text = "not available", highlight = "NonText" },
-        }
+        table.insert(text_chunks, { "not available", "NonText" })
+        return text_chunks, virt_chunks
     end
 
     local base_hl = data.greyout and "NonText" or nil
 
     -- scope label (single segment)
     if data.scopelabel then
-        return {
-            { text = data.scopelabel, highlight = base_hl or "Directory" },
-        }
+        table.insert(text_chunks, { data.scopelabel, base_hl or "Directory" })
+        return text_chunks, virt_chunks
     end
 
     local name = tostring(data.name or "unknown")
@@ -133,10 +134,8 @@ local function _variable_node_formatter(id, data)
     local preview, _ = _preview_string(value, vim.o.columns - 20)
 
     -- name
-    local chunks = {
-        { text = name, highlight = base_hl or "@symbol" },
-        { text = ": ", highlight = base_hl or "NonText" },
-    }
+    table.insert(text_chunks, { name, base_hl or "@symbol" })
+    table.insert(text_chunks, { ": ", base_hl or "NonText" })
 
     -- value highlight
     local hl = base_hl
@@ -147,12 +146,9 @@ local function _variable_node_formatter(id, data)
     local kind = data.presentationHint and data.presentationHint.kind
     local val_hl = hl or _var_kind_to_hl_group[kind] or "@variable"
 
-    table.insert(chunks, {
-        text = preview,
-        highlight = val_hl,
-    })
+    table.insert(text_chunks, { preview, val_hl })
 
-    return chunks
+    return text_chunks, virt_chunks
 end
 
 
@@ -279,7 +275,8 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_so
         local expanded = self._layout_cache[path]
         if expanded == nil then
             expanded = not (scope.expensive or scope.presentationHint == "globals"
-                or scope.name == "Registers" or scope.name == "Global" or scope.name == "Static")
+                or scope.name == "Registers" or scope.name == "Static"
+                or scope.name == "Global" or scope.name == "Globals")
         end
 
         ---@type loop.comp.ItemTree.Item

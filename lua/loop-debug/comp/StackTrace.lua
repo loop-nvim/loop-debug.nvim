@@ -13,38 +13,39 @@ local StackTrace = class(ItemListComp)
 ---@return loop.comp.ItemList.Chunk[]
 local function _item_formatter(id, data)
     local chunks = {}
-
     local frame = data.frame
+
     if not frame then
         table.insert(chunks, {
-            text = tostring(data.text or ""),
-            highlight = data.greyout and "NonText" or "Directory"
+            tostring(data.text or ""),
+            data.greyout and "NonText" or "Directory"
         })
         return chunks
     end
 
     -- function name
-    table.insert(chunks, { text = tostring(frame.name), highlight = "@function" })
+    table.insert(chunks, { tostring(frame.name), "@function" })
 
     if frame.source and frame.source.name then
-        table.insert(chunks, { text = " - " }) -- separator
-        table.insert(chunks, { text = tostring(frame.source.name), highlight = "@module" })
+        table.insert(chunks, { " " })        -- separator before dash
+        table.insert(chunks, { "- " })       -- actual dash
+        table.insert(chunks, { tostring(frame.source.name), "@module" })
 
         if frame.line then
-            table.insert(chunks, { text = ":" })
-            table.insert(chunks, { text = tostring(frame.line), highlight = "@number" })
+            table.insert(chunks, { ":" })
+            table.insert(chunks, { tostring(frame.line), "@number" })
 
             if frame.column then
-                table.insert(chunks, { text = ":" })
-                table.insert(chunks, { text = tostring(frame.column), highlight = "@number" })
+                table.insert(chunks, { ":" })
+                table.insert(chunks, { tostring(frame.column), "@number" })
             end
         end
     end
 
     -- apply greyout if needed
     if data.greyout then
-        for _, chunk in ipairs(chunks) do
-            chunk.highlight = "NonText"
+        for i, chunk in ipairs(chunks) do
+            chunk[2] = "NonText"
         end
     end
 

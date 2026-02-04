@@ -12,17 +12,15 @@ local SessionListComp = class(ItemList)
 ---@return loop.comp.ItemList.Chunk[]
 local function _item_formatter(id, data)
     local chunks = {}
-
     -- Main label
-    table.insert(chunks, { text = tostring(data.label), highlight = nil })
+    table.insert(chunks, { tostring(data.label), nil })
 
     -- Optional paused threads info
     if data.nb_paused_threads and data.nb_paused_threads > 0 then
         local s = data.nb_paused_threads > 1 and "s" or ""
         local paused_text = (" (%d paused thread%s)"):format(data.nb_paused_threads, s)
-        table.insert(chunks, { text = paused_text, highlight = "Comment" })
+        table.insert(chunks, { paused_text, "Comment" })
     end
-
     return chunks
 end
 
