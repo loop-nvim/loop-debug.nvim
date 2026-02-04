@@ -273,7 +273,6 @@ debuggers["js-debug"] = {
         local page_data = page_group.add_page({
             id = "term",
             type = "term",
-            buftype = "term",
             label = "Debug Server",
             term_args = args,
             activate = true,

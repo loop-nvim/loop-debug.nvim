@@ -70,8 +70,8 @@ local function _create_components(vars_winid, stack_winid)
     assert(not _vars_compbuffer and not _stack_compbuffer)
     assert(not _variables_comp and not _stacktrace_comp)
 
-    _vars_compbuffer = CompBuffer:new("debugvars", "Variables")
-    _stack_compbuffer = CompBuffer:new("callstack", "Call Stack")
+    _vars_compbuffer = CompBuffer:new("loopdebug-vars", "Variables")
+    _stack_compbuffer = CompBuffer:new("loopdebug-callstack", "Call Stack")
 
     vim.wo[vars_winid].winfixbuf = false
     vim.api.nvim_win_set_buf(vars_winid, (_vars_compbuffer:get_or_create_buf()))

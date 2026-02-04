@@ -344,7 +344,6 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
             id = tostring(sess_id),
             type = "repl",
             label = sess_name,
-            buftype = "repl",
             activate = false
         })
         if page_data then
@@ -445,7 +444,6 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
                 page_data = page_group.add_page({
                     id = tostring(sess_id),
                     type = "output",
-                    buftype = "output",
                     label = sess_name,
                 })
             end
@@ -687,7 +685,6 @@ function M.track_new_debugjob(task_name, page_manager)
     local page_data = page_manager.add_page_group(_page_groups.task, "Debug Sessions").add_page({
         id = "sessions",
         type = "comp",
-        buftype = "sessions",
         label = "Debug Sessions",
         activate = true,
     })
@@ -736,7 +733,6 @@ function M.track_new_debugjob(task_name, page_manager)
                     ---@diagnostic disable-next-line: undefined-field
                     id = "term." .. name .. vim.loop.hrtime(),
                     type = "term",
-                    buftype = "term",
                     label = "Debug Server",
                     term_args =
                         start_args,
