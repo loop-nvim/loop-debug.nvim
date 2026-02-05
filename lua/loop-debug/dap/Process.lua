@@ -2,6 +2,12 @@
 local uv = require('luv')
 local class = require('loop.tools.class')
 
+local function _safe_close(h)
+    if h and not h:is_closing() then
+        h:close()
+    end
+end
+
 ---@class loopdebug.Process.Opts
 ---@field cmd string
 ---@field args string[]|nil
@@ -122,6 +128,7 @@ function Process:_env_list()
     end
     return out
 end
+
 -- Writing to stdin
 -------------------------------------------------
 function Process:write(data)
@@ -143,35 +150,24 @@ function Process:terminate(timeout)
     if self.exited or self.killed then return end
     self.killed = true
 
-    if self.handle and not self.handle:is_closing() then
-        self.handle:kill("sigterm")
-    end
-
-    local timer = uv.new_timer()
-    timer:start(timeout or 800, 0, vim.schedule_wrap(function()
-        timer:close()
-        if not self.exited and self.handle and not self.handle:is_closing() then
+    _safe_close(self.stdin) -- dap process should stop after this
+    vim.defer_fn(function()
+        if self.handle and not self.handle:is_closing() then
+            vim.notify("DAP process did not terminate cleanly")
             self.handle:kill("sigkill")
-            -- Force cleanup even if callback never fires
-            self:_close_all()
+            self:_close_all() -- cleanup
         end
-    end))
+    end, 10000)
 end
 
 -------------------------------------------------
 -- Cleanup handles
 -------------------------------------------------
 function Process:_close_all()
-    local function safe_close(h)
-        if h and not h:is_closing() then
-            h:close()
-        end
-    end
-
-    safe_close(self.stdin)
-    safe_close(self.stdout)
-    safe_close(self.stderr)
-    safe_close(self.handle)
+    _safe_close(self.stdin)
+    _safe_close(self.stdout)
+    _safe_close(self.stderr)
+    _safe_close(self.handle)
 
     self.stdin = nil
     self.stdout = nil
