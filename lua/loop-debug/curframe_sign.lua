@@ -7,6 +7,7 @@ local extmarks    = require('loop.extmarks')
 local config      = require("loop-debug.config")
 local filetools   = require('loop.tools.file')
 local uitools     = require('loop.tools.uitools')
+local strtools    = require('loop.tools.strtools')
 
 do
     -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'DiagnosticInfo' })
@@ -25,7 +26,7 @@ local _sign_name           = "currentframe"
 local _init_done           = false
 local _query_context       = 0
 
-local MAX_VALUE_LEN        = 25
+local _vars_max_value_len  = 25
 local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
 local _vars_extmark_id     = 0
 
@@ -152,16 +153,19 @@ local function _place_variables_virttext(frame, data)
     --------------------------------------------------------------------
     local function place_value(id_node, name, value)
         local display = tostring(value)
-        if #display > MAX_VALUE_LEN then
-            display = display:sub(1, MAX_VALUE_LEN) .. "…"
-        end
-
         local text = string.format(
-            "%s %s: %s",
-            config.current.symbols.variable_value or "=",
+            "%s: %s",
             name,
             display
         )
+        if #text > _vars_max_value_len then
+            text = string.format(
+                "%s: %s",
+                strtools.crop_string_for_ui(name, math.floor(_vars_max_value_len / 3)),
+                display
+            )
+            text = strtools.crop_string_for_ui(text, _vars_max_value_len)
+        end
 
         local sr, _, _, _ = id_node:range() -- 0-based
 
@@ -169,7 +173,7 @@ local function _place_variables_virttext(frame, data)
         _vars_extmarks_group.place_file_extmark(_vars_extmark_id, filepath, sr + 1, 0, {
             virt_text     = {
                 { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
-                { name .. ": " .. display, "LoopDebugVarPill" },
+                { text, "LoopDebugVarPill" },
                 { "", "LoopDebugVarPillSep" }, -- right rounded cap
             },
             virt_text_pos = "eol",
