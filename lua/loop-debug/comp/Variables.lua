@@ -179,6 +179,18 @@ function Variables:init()
 
     ---@type loop.TrackerRef?
     self._events_tracker_ref = debugevents.add_tracker({
+        on_debug_start = function()
+            self:clear_items()
+            self._current_data_source = nil
+            self._query_context = self._query_context + 1
+            self:_update_data(self._query_context)
+        end,
+        on_debug_end = function(success)
+            self:clear_items()
+            self._current_data_source = nil
+            self._query_context = self._query_context + 1
+            self:_update_data(self._query_context)
+        end,
         on_view_udpate = function(view)
             self._current_data_source = view
             self._query_context = self._query_context + 1
@@ -316,10 +328,6 @@ end
 ---@param expr string
 ---@param item_id any
 function Variables:_load_expr_value(context, parent_id, expr, item_id)
-    local ds = self._current_data_source
-    if not ds or not ds.frame or not ds.data_providers then
-        return
-    end
 
     local path = parent_id .. "/" .. expr
 
@@ -330,11 +338,18 @@ function Variables:_load_expr_value(context, parent_id, expr, item_id)
     local var_item = {
         id = item_id,
         expanded = self._layout_cache[path],
-        data = existing and existing.data or { path = path, is_expr = true, name = expr }
+        data = existing and existing.data or { path = path, is_expr = true, name = expr, is_na = true, value = "not available" }
     }
 
-    -- Ensure the name is correct if it was renamed
+   -- Ensure the name is correct if it was renamed
     var_item.data.name = expr
+
+    self:upsert_item(parent_id, var_item)
+
+    local ds = self._current_data_source
+    if not ds or not ds.frame or not ds.data_providers then
+        return
+    end
 
     ds.data_providers.evaluate_provider({
         expression = expr, frameId = ds.frame.id, context = "watch",
@@ -417,14 +432,14 @@ function Variables:link_to_buffer(comp)
     comp.add_keymap("c", {
         desc = "Edit Expression",
         callback = function()
-            local cur = self:get_cur_item(comp)
+            local cur = self:get_cur_item()
             if cur and cur.data.is_expr then add_or_edit_watch(cur) end
         end
     })
     comp.add_keymap("d", {
         desc = "Delete Expression",
         callback = function()
-            local cur = self:get_cur_item(comp)
+            local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
                 _remove_expr(cur.data.name)
                 self:remove_item(cur.id)

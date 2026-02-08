@@ -193,6 +193,7 @@ local function _place_variables_virttext(frame, data)
     ---@type TSNode[]
     local scope_stack = {}
 
+    ---@type TSNode?
     local n = current
     while n do
         if _ts_SCOPE_NODES[n:type()] then

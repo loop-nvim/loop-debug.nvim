@@ -40,22 +40,14 @@ local M                  = {}
 
 ---@class loopdebug.mgr.DebugJobData
 ---@field jobname string
----@field page_manager loop.PageManager
+---@field repl_page_group loop.PageGroup
+---@field output_page_group loop.PageGroup
 ---@field session_ctx number
 ---@field current_session_id number|nil
 ---@field session_data table<number, loopdebug.mgr.SessionData>
 
 ---@type loopdebug.mgr.DebugJobData|nil
 local _current_job_data
-
-local _page_groups       = {
-    task = "task",
-    variables = "vars",
-    watch = "watch",
-    stack = "stack",
-    output = "output",
-    repl = "repl",
-}
 
 -- =============================================================================
 -- Context Management
@@ -335,53 +327,49 @@ local function _on_session_added(jobdata, sess_id, sess_name, parent_id, control
     end
 
     -- Setup REPL
-    local repl_page_group = jobdata.page_manager.get_page_group(_page_groups.repl)
-    if not repl_page_group then
-        repl_page_group = jobdata.page_manager.add_page_group(_page_groups.repl, "Debug Console")
-    end
-    if repl_page_group then
-        local page_data = repl_page_group.add_page({
-            id = tostring(sess_id),
-            type = "repl",
-            label = sess_name,
-            activate = false
-        })
-        if page_data then
-            session_data.repl_ctrl = page_data.repl_buf
-            session_data.repl_ctrl.set_input_handler(function(input)
-                data_providers.evaluate_provider({
-                    expression = input,
-                    context = "repl",
-                }, function(eval_err, data)
-                    if not data then
-                        local msg = eval_err or "Evaluation error"
-                        session_data.repl_ctrl.add_output("\27[31m" .. msg .. "\27[0m")
-                    else
-                        session_data.repl_ctrl.add_output(tostring(data.result))
-                    end
-                end)
+    local repl_page_group = jobdata.repl_page_group
+    local page_data = repl_page_group.add_page({
+        type = "repl",
+        buftype = "loopdebug-repl",
+        label = sess_name,
+        activate = false
+    })
+    if page_data then
+        session_data.repl_ctrl = page_data.repl_buf
+        session_data.repl_ctrl.set_input_handler(function(input)
+            data_providers.evaluate_provider({
+                expression = input,
+                context = "repl",
+            }, function(eval_err, data)
+                if not data then
+                    local msg = eval_err or "Evaluation error"
+                    session_data.repl_ctrl.add_output("\27[31m" .. msg .. "\27[0m")
+                else
+                    session_data.repl_ctrl.add_output(tostring(data.result))
+                end
             end)
-            session_data.repl_ctrl.set_completion_handler(function(input, callback)
-                data_providers.completion_provider({
-                    text = input,
-                    column = #input + 1,
-                    frameId = session_data.cur_frame and session_data.cur_frame.id or nil,
-                }, function(compl_err, data)
-                    if data then
-                        local strs = {}
-                        for _, item in ipairs(data.targets or {}) do
-                            local str = item.text or item.label
-                            if str then table.insert(strs, str) end
-                        end
-                        callback(strs)
-                    else
-                        callback(nil, compl_err)
+        end)
+        session_data.repl_ctrl.set_completion_handler(function(input, callback)
+            data_providers.completion_provider({
+                text = input,
+                column = #input + 1,
+                frameId = session_data.cur_frame and session_data.cur_frame.id or nil,
+            }, function(compl_err, data)
+                if data then
+                    local strs = {}
+                    for _, item in ipairs(data.targets or {}) do
+                        local str = item.text or item.label
+                        if str then table.insert(strs, str) end
                     end
-                end)
+                    callback(strs)
+                else
+                    callback(nil, compl_err)
+                end
             end)
-        end
+        end)
     end
 end
+
 
 ---@param jobdata loopdebug.mgr.DebugJobData
 ---@param sess_id number
@@ -420,6 +408,7 @@ end
 ---@param category string
 ---@param output string
 local function _on_session_output(jobdata, sess_id, sess_name, category, output)
+    ---@type loopdebug.mgr.SessionData?
     local sess_data = jobdata.session_data[sess_id]
     if not sess_data then return end
 
@@ -436,21 +425,11 @@ local function _on_session_output(jobdata, sess_id, sess_name, category, output)
     -- Process Output
     local debuggee_output_ctrl = sess_data.debuggee_output_ctrl
     if not debuggee_output_ctrl then
-        local page_group = jobdata.page_manager.get_page_group(_page_groups.output)
-            or jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
-        if page_group then
-            local page_data = page_group.get_page(tostring(sess_id))
-            if not page_data then
-                page_data = page_group.add_page({
-                    id = tostring(sess_id),
-                    type = "output",
-                    label = sess_name,
-                })
-            end
-            if page_data then
-                sess_data.debuggee_output_ctrl = page_data.output_buf
-                debuggee_output_ctrl = sess_data.debuggee_output_ctrl
-            end
+        local page_group = jobdata.output_page_group
+        local page_data = page_group.add_page({ buftype = "loopdebug-output", type = "output", label = sess_name })
+        if page_data then
+            sess_data.debuggee_output_ctrl = page_data.output_buf
+            debuggee_output_ctrl = sess_data.debuggee_output_ctrl
         end
     end
 
@@ -682,13 +661,19 @@ function M.track_new_debugjob(task_name, page_manager)
 
     debugevents.report_debug_start()
 
-    local page_data = page_manager.add_page_group(_page_groups.task, "Debug Sessions").add_page({
-        id = "sessions",
+    local page_data = page_manager.add_page_group("Debug Sessions").add_page({
         type = "comp",
+        buftype = "loopdebug-sessions",
         label = "Debug Sessions",
         activate = true,
     })
     assert(page_data)
+
+    local repl_page_group = page_manager.add_page_group("Debug Console")
+    local output_page_group = page_manager.add_page_group("Debug Output")
+
+    assert(repl_page_group)
+    assert(output_page_group)
 
     local sessionlist_comp = SessionList:new()
     sessionlist_comp:link_to_buffer(page_data.comp_buf)
@@ -697,7 +682,8 @@ function M.track_new_debugjob(task_name, page_manager)
     ---@type loopdebug.mgr.DebugJobData
     local jobdata = {
         jobname = task_name,
-        page_manager = page_manager,
+        repl_page_group = repl_page_group,
+        output_page_group = output_page_group,
         session_ctx = 1,
         session_data = {},
     }
@@ -724,22 +710,15 @@ function M.track_new_debugjob(task_name, page_manager)
             _on_session_thread_continue(jobdata, id, name, data)
         end,
         on_new_term = function(name, args, cb)
-            -- Terminal logic remains same, inlined for brevity if needed or kept as original
             local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
-            local pg = jobdata.page_manager.get_page_group(_page_groups.output)
-                or jobdata.page_manager.add_page_group(_page_groups.output, "Debug Output")
-            if pg then
-                local pd, err = pg.add_page({
-                    ---@diagnostic disable-next-line: undefined-field
-                    id = "term." .. name .. vim.loop.hrtime(),
-                    type = "term",
-                    label = "Debug Server",
-                    term_args =
-                        start_args,
-                    activate = true
-                })
-                if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
-            end
+            local pd, err = output_page_group.add_page({
+                type = "term",
+                buftype = "loopdebug-term",
+                label = name,
+                term_args = start_args,
+                activate = true
+            })
+            if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
         end,
         on_breakpoint_event = function(sess_id, sess_name, event)
             debugevents.report_breakpoints_update(sess_id, event)

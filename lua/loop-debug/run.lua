@@ -168,6 +168,7 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
         end
         local on_job_exit = function(code)
             if debugger.end_hook then
+                logs.user_log("calling debugger end_hook", "task")
                 hook_context.exit_code = code
                 debugger.end_hook(hook_context, fntools.called_once(function()
                     task_control_context.disable_control = true
@@ -182,6 +183,7 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
     end
 
     if debugger.start_hook then
+        logs.user_log("calling debugger start_hook", "task")
         debugger.start_hook(hook_context, fntools.called_once(function(ok, err)
             if ok then
                 start_job()

@@ -133,6 +133,7 @@ function StackTrace:_update_data(view)
             levels = config.current.stack_levels_limit or 100,
         },
         function(err, resp)
+            if not resp then return end
             local cur_item_id = nil
             if context ~= self._query_context then return end
             local text = "Thread: " .. (view.thread_name or tostring(view.thread_id))
@@ -140,20 +141,18 @@ function StackTrace:_update_data(view)
                 id = 0,
                 data = { text = text }
             } }
-            if resp then
+            for idx, frame in ipairs(resp.stackFrames) do
+                ---@type loop.comp.ItemList.Item
+                local item = { id = idx, data = { frame = frame } }
+                table.insert(items, item)
+                if view.frame and frame.id == view.frame.id then cur_item_id = item.id end
+            end
+            if not cur_item_id and view.frame then
                 for idx, frame in ipairs(resp.stackFrames) do
-                    ---@type loop.comp.ItemList.Item
-                    local item = { id = idx, data = { frame = frame } }
-                    table.insert(items, item)
-                    if view.frame and frame.id == view.frame.id then cur_item_id = item.id end
-                end
-                if not cur_item_id and view.frame then
-                    for idx, frame in ipairs(resp.stackFrames) do
-                        if frame.name == view.frame.name
-                            and frame.moduleId == view.frame.moduleId
-                            and frame.line == view.frame.line then
-                            cur_item_id = idx
-                        end
+                    if frame.name == view.frame.name
+                        and frame.moduleId == view.frame.moduleId
+                        and frame.line == view.frame.line then
+                        cur_item_id = idx
                     end
                 end
             end

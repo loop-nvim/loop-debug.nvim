@@ -95,6 +95,7 @@ function SessionListComp:_refresh()
             }
         }
         local symbols = config.current.symbols
+        assert(symbols)
         self:set_items({ item })
         if self._page then
             self._page.set_ui_flags(self._job_result and '' or symbols.failure)
@@ -110,6 +111,7 @@ function SessionListComp:_refresh()
     local uiflags = ''
 
     local symbols = config.current.symbols
+    assert(symbols)
 
     for _, sess_id in ipairs(session_ids) do
         local info = self._sessions[sess_id]

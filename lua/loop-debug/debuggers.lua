@@ -267,17 +267,23 @@ debuggers["js-debug"] = {
             end
         }
 
-        local page_group = context.page_manager.add_page_group("nodejs_server", "Debug Server")
-        if not page_group then return end
+        local page_group = context.page_manager.add_page_group("Debug Server")
+        if not page_group then
+            callback(false, "failed to create page group")
+            return
+        end
 
-        local page_data = page_group.add_page({
-            id = "term",
+        local page_data, page_err = page_group.add_page({
             type = "term",
+            buftype = "loopdebug-term",
             label = "Debug Server",
             term_args = args,
             activate = true,
         })
-
+        if not page_data then
+            callback(false, page_err)
+            return
+        end
         context.user_data.proc = page_data and page_data.term_proc or nil
     end,
 
