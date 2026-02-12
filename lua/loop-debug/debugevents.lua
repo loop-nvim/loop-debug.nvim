@@ -18,7 +18,7 @@ local Trackers  = require("loop.tools.Trackers")
 
 ---@class loopdebug.events.Tracker
 ---@field on_debug_start fun()?
----@field on_debug_end fun(success:boolean)?
+---@field on_debug_end fun()?
 ---@field on_session_added fun(id:number,info:loopdebug.events.SessionInfo)?
 ---@field on_session_update fun(id:number,info:loopdebug.events.SessionInfo)?
 ---@field on_session_removed fun(id:number)?
@@ -55,11 +55,10 @@ function M.report_debug_start()
 	_trackers:invoke("on_debug_start");
 end
 
----@param success boolean
-function M.report_debug_end(success)
+function M.report_debug_end()
 	_sessions = {}
 	_current_view = nil
-	_trackers:invoke("on_debug_end", success);
+	_trackers:invoke("on_debug_end");
 end
 
 ---@type fun(id:number,info:loopdebug.events.SessionInfo)

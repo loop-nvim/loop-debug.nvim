@@ -185,7 +185,7 @@ function Variables:init()
             self._query_context = self._query_context + 1
             self:_update_data(self._query_context)
         end,
-        on_debug_end = function(success)
+        on_debug_end = function()
             self:clear_items()
             self._current_data_source = nil
             self._query_context = self._query_context + 1

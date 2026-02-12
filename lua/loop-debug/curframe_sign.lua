@@ -265,7 +265,7 @@ function M.init()
         on_debug_start = function()
 
         end,
-        on_debug_end = function(success)
+        on_debug_end = function()
 
         end,
         on_view_udpate = function(view)

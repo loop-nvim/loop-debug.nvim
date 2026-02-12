@@ -32,19 +32,15 @@ function SessionListComp:init()
 
     ---@type table<number,loopdebug.events.SessionInfo>
     self._sessions = {}
-    ---@type boolean?
-    self._job_result = nil
 
     ---@type loop.TrackerRef?
     self._events_tracker_ref = debugevents.add_tracker({
         on_debug_start = function()
             self._sessions = {}
-            self._job_result = nil
             self:_refresh()
         end,
-        on_debug_end = function(success)
+        on_debug_end = function()
             self._sessions = {}
-            self._job_result = success
             self:_refresh()
         end,
         on_session_added = function(id, info)
@@ -84,22 +80,17 @@ function SessionListComp:link_to_buffer(buf_ctrl)
 end
 
 function SessionListComp:_refresh()
-    if self._job_result then
+    if next(self._sessions) == nil then
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = 0,
             ---@class loopdebug.mgr.TaskPageItemData
             data = {
-                label = self._job_result and "Task ended" or "Task failed",
+                label = "No debug sessions",
                 nb_paused_threads = 0,
             }
         }
-        local symbols = config.current.symbols
-        assert(symbols)
         self:set_items({ item })
-        if self._page then
-            self._page.set_ui_flags(self._job_result and '' or symbols.failure)
-        end
         return
     end
 

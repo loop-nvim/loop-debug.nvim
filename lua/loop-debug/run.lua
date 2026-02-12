@@ -2,10 +2,91 @@ local M = {}
 
 local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
+local SessionList = require('loop-debug.comp.SessionList')
 local manager = require('loop-debug.manager')
 local breakpoints = require('loop-debug.breakpoints')
 local fntools = require('loop.tools.fntools')
 local logs = require('loop.logs')
+
+---@type loop.comp.ItemList?
+local _sessionlist_comp = nil
+---@type loop.PageGroup?
+local _repl_page_group = nil
+---@type loop.PageGroup?
+local _output_page_group = nil
+
+---@param task_name string
+---@param page_manager loop.PageManager
+---@param on_exit fun(code : number)
+---@return loop.job.debugjob.Tracker
+local function _create_job_tracker(task_name, page_manager, on_exit)
+    assert(type(task_name) == "string")
+
+    if not _sessionlist_comp then
+        local page_data = page_manager.add_page_group("Debug Sessions").add_page({
+            type = "comp",
+            buftype = "loopdebug-sessions",
+            label = "Debug Sessions",
+            activate = true,
+        })
+        assert(page_data)
+        _sessionlist_comp = SessionList:new()
+        _sessionlist_comp:link_to_buffer(page_data.comp_buf)
+        _sessionlist_comp:set_page(page_data.page)
+        if not _repl_page_group then
+            _repl_page_group = page_manager.add_page_group("Debug Console")
+        end
+        if not _output_page_group then
+            _output_page_group = page_manager.add_page_group("Debug Output")
+        end
+    end
+    assert(_repl_page_group)
+    assert(_output_page_group)
+
+    ---@type loop.job.debugjob.Tracker
+    return {
+        on_sess_added = function(id, name, pid, ctrl, prov)
+            manager.add_session(id, name, pid, ctrl, prov,
+                _repl_page_group, _output_page_group)
+        end,
+        on_sess_removed = function(id, name)
+            manager.remove_session(id, name)
+        end,
+        on_sess_state = function(id, name, data)
+            manager.on_session_state_update(id, name, data)
+        end,
+        on_output = function(id, name, cat, out)
+            manager.on_session_output(id, name, cat, out)
+        end,
+        on_thread_pause = function(id, name, data)
+            manager.on_session_thread_pause(id, name, data)
+        end,
+        on_thread_continue = function(id, name, data)
+            manager.on_session_thread_continue(id, name, data)
+        end,
+        on_new_term = function(name, args, cb)
+            local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
+            local pd, err = _output_page_group.add_page({
+                type = "term",
+                buftype = "loopdebug-term",
+                label = name,
+                term_args = start_args,
+                activate = true
+            })
+            if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
+        end,
+        on_breakpoint_event = function(sess_id, sess_name, event)
+            manager.on_breakpoint_event(sess_id, event)
+        end,
+        on_startup_error = function()
+            on_exit(-1)
+        end,
+        on_exit = function(code)
+            on_exit(code)
+        end
+    }
+end
+
 
 ---@param args loop.DebugJob.StartArgs
 ---@param page_manager loop.PageManager
@@ -33,9 +114,10 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     })
 
     -- Add trackers
-    job:add_tracker(manager.track_new_debugjob(args.name, page_manager))
-    job:add_tracker({ on_exit = exit_handler })
-    job:add_tracker({ on_exit = function() bpts_tracker_ref:cancel() end })
+    job:add_tracker(_create_job_tracker(args.name, page_manager, function(code)
+        bpts_tracker_ref:cancel()
+        exit_handler(code)
+    end))
 
     -- Start the debug job
     local ok, err = job:start(args)

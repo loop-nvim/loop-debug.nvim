@@ -82,7 +82,7 @@ function StackTrace:init()
         on_debug_start = function()
             self:set_items({})
         end,
-        on_debug_end = function(success)
+        on_debug_end = function()
             self:set_items({})
         end,
         on_view_udpate = function(view)
