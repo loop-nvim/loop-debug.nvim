@@ -43,7 +43,7 @@ end
 
 ---@param state loop.ExtensionState
 function M.on_state_will_save(state)
-    _trackers:invoke_sync("on_ws_will_save")
+    _trackers:invoke("on_ws_will_save")
 end
 
 function M.is_ws_open()
