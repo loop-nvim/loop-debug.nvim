@@ -113,12 +113,16 @@ function SessionListComp:_refresh()
         else
             flag = symbols.running
         end
+        local label = tostring(info.name)
+        if info.state ~= "running" then
+            label = ("%s (%s)"):format(label, info.state)
+        end
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = sess_id,
             ---@class loopdebug.mgr.TaskPageItemData
             data = {
-                label = tostring(info.name) .. ' - ' .. info.state,
+                label = label,
                 nb_paused_threads = nb_paused_threads,
             }
         }

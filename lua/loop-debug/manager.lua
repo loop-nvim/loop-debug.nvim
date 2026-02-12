@@ -24,8 +24,6 @@ local M                  = {}
 
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
----@field repl_page_group loop.PageGroup
----@field output_page_group loop.PageGroup
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
@@ -34,7 +32,6 @@ local M                  = {}
 ---@field thread_names table<number, string> Map of thread ID to name
 ---@field cur_thread_id number|nil Currently selected thread
 ---@field cur_frame loopdebug.proto.StackFrame|nil Currently selected stack frame
----@field repl_ctrl loop.ReplController|nil
 ---@field debuggee_output_ctrl loop.OutputBufferController|nil
 
 ---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
@@ -300,15 +297,11 @@ end
 ---@param parent_id number|nil
 ---@param controller loop.job.DebugJob.SessionController
 ---@param data_providers loopdebug.session.DataProviders
----@param repl_page_group loop.PageGroup
----@param output_page_group loop.PageGroup
 function M.add_session(sess_id,
                        sess_name,
                        parent_id,
                        controller,
-                       data_providers,
-                       repl_page_group,
-                       output_page_group)
+                       data_providers)
     assert(not _manager_data.session_data[sess_id])
 
     if next(_manager_data.session_data) == nil then
@@ -325,8 +318,6 @@ function M.add_session(sess_id,
     ---@type loopdebug.mgr.SessionData
     local session_data = {
         sess_name = sess_name,
-        repl_page_group = repl_page_group,
-        output_page_group = output_page_group,
         controller = controller,
         data_providers = data_providers,
         context_keys = { pause_ctx = 1, thread_ctx = 1, frame_ctx = 1 },
@@ -339,49 +330,6 @@ function M.add_session(sess_id,
     -- If this is the first session, select it automatically
     if not _manager_data.current_session_id then
         _manager_data.current_session_id = sess_id
-    end
-
-    -- Setup REPL
-    local page_data = repl_page_group.add_page({
-        type = "repl",
-        buftype = "loopdebug-repl",
-        label = sess_name,
-        activate = false
-    })
-
-    if page_data then
-        session_data.repl_ctrl = page_data.repl_buf
-        session_data.repl_ctrl.set_input_handler(function(input)
-            data_providers.evaluate_provider({
-                expression = input,
-                context = "repl",
-            }, function(eval_err, data)
-                if not data then
-                    local msg = eval_err or "Evaluation error"
-                    session_data.repl_ctrl.add_output("\27[31m" .. msg .. "\27[0m")
-                else
-                    session_data.repl_ctrl.add_output(tostring(data.result))
-                end
-            end)
-        end)
-        session_data.repl_ctrl.set_completion_handler(function(input, callback)
-            data_providers.completion_provider({
-                text = input,
-                column = #input + 1,
-                frameId = session_data.cur_frame and session_data.cur_frame.id or nil,
-            }, function(compl_err, data)
-                if data then
-                    local strs = {}
-                    for _, item in ipairs(data.targets or {}) do
-                        local str = item.text or item.label
-                        if str then table.insert(strs, str) end
-                    end
-                    callback(strs)
-                else
-                    callback(nil, compl_err)
-                end
-            end)
-        end)
     end
 end
 
@@ -414,46 +362,6 @@ function M.on_session_state_update(sess_id, sess_name, data)
         session_data.cur_frame = nil
         if mgr_data.current_session_id == sess_id then
             _switch_to_session(nil)
-        end
-    end
-end
-
----@param sess_id number
----@param sess_name string
----@param category string
----@param output string
-function M.on_session_output(sess_id, sess_name, category, output)
-    ---@type loopdebug.mgr.SessionData?
-    local sess_data = _manager_data.session_data[sess_id]
-    if not sess_data then return end
-
-    -- REPL Output
-    if category ~= "stdout" and category ~= "stderr" then
-        if sess_data.repl_ctrl then
-            for line in output:gmatch("([^\r\n]*)\r?\n?") do
-                if line ~= "" then sess_data.repl_ctrl.add_output(line) end
-            end
-        end
-        return
-    end
-
-    -- Process Output
-    local debuggee_output_ctrl = sess_data.debuggee_output_ctrl
-    if not debuggee_output_ctrl then
-        local page_group = sess_data.output_page_group
-        local page_data = page_group.add_page({ buftype = "loopdebug-output", type = "output", label = sess_name })
-        if page_data then
-            sess_data.debuggee_output_ctrl = page_data.output_buf
-            debuggee_output_ctrl = sess_data.debuggee_output_ctrl
-        end
-    end
-
-    if debuggee_output_ctrl then
-        --local highlight = (category == "stderr") and "ErrorMsg" or nil -- TODO
-        for line in output:gmatch("([^\r\n]*)\r?\n?") do
-            if line ~= "" then
-                debuggee_output_ctrl.add_lines(line)
-            end
         end
     end
 end

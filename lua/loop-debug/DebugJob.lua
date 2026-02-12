@@ -1,6 +1,5 @@
 local class            = require('loop.tools.class')
 local Session          = require('loop-debug.dap.Session')
-local Trackers         = require("loop.tools.Trackers")
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -27,50 +26,50 @@ local Trackers         = require("loop.tools.Trackers")
 ---@field terminate fun()
 
 ---@class loop.job.debugjob.Tracker
----@field on_startup_error fun()|nil
 ---@field on_exit fun(code : number)|nil
----@field on_sess_added fun(id:number,name:string, parent_id:number,ctrl:loop.job.DebugJob.SessionController,data:loopdebug.session.DataProviders)|nil
+---@field on_sess_added fun(id:number,name:string, parent_id:number?,ctrl:loop.job.DebugJob.SessionController,data:loopdebug.session.DataProviders)|nil
 ---@field on_sess_removed fun(id:number, name:string)|nil
 ---@field on_sess_state fun(id:number, name:string, data:loopdebug.session.notify.StateData)|nil
----@field on_new_term fun(name:string,args:loopdebug.proto.RunInTerminalRequestArguments,callback:fun(pid:number|nil,err:string|nil))|nil
----@field on_output fun(sess_id:number, sess_name:string, category:string, output:string)|nil
 ---@field on_thread_pause fun(sess_id:number, sess_name:string,data:loopdebug.session.notify.ThreadsEventScope)|nil
 ---@field on_thread_continue fun(sess_id:number, sess_name:string,data:loopdebug.session.notify.ThreadsEventScope)|nil
 ---@field on_breakpoint_event fun(sess_id:number, sess_name:string, event:loopdebug.session.notify.BreakpointsEvent)|nil
 
+---@class loopdebug.DebugJob.SessionData
+---@field session loopdebug.Session
+---@field page_group loop.PageGroup
+---@field repl_ctrl loop.ReplController?
+---@field debuggee_output_ctrl loop.OutputBufferController?
+
 ---@class loop.job.DebugJob
----@field new fun(self: loop.job.DebugJob, name:string) : loop.job.DebugJob
----@field _sessions table<number,loopdebug.Session>
----@field _trackers loop.tools.Trackers<loop.job.debugjob.Tracker>
+---@field new fun(self: loop.job.DebugJob, name:string, page_manager:loop.PageManager) : loop.job.DebugJob
+---@field _name string
+---@field _page_manager loop.PageManager
+---@field _session_data table<number,loopdebug.DebugJob.SessionData>
+---@field _breakpoints table<number,loopdebug.SourceBreakpoint>
+---@field tracker loop.job.debugjob.Tracker
 local DebugJob         = class()
 
 local _last_session_id = 0
 
 ---Initializes the DebugJob instance.
 ---@param name string
-function DebugJob:init(name)
+---@param page_manager loop.PageManager
+function DebugJob:init(name, page_manager)
     self._log = require('loop-debug.tools.Logger').create_logger("DebugJob[" .. tostring(name) .. "]")
-    ---@type table<number,loopdebug.Session>
-    self._sessions = {}
-    ---@type table<number,loopdebug.SourceBreakpoint>
+    self._name = name
+    self._page_manager = page_manager
+    self._session_data = {}
     self._breakpoints = {}
-    self._trackers = Trackers:new()
-end
-
----@param callbacks loop.job.debugjob.Tracker>
----@return loop.TrackerRef
-function DebugJob:add_tracker(callbacks)
-    return self._trackers:add_tracker(callbacks)
 end
 
 ---@return boolean
 function DebugJob:is_running()
-    return next(self._sessions) ~= nil
+    return next(self._session_data) ~= nil
 end
 
 function DebugJob:terminate()
-    for _, s in pairs(self._sessions) do
-        s:terminate()
+    for _, data in pairs(self._session_data) do
+        data.session:terminate()
     end
 end
 
@@ -80,13 +79,12 @@ end
 
 ---Starts a new terminal job.
 ---@param args loop.DebugJob.StartArgs
+---@param tracker loop.job.debugjob.Tracker
 ---@return boolean, string|nil
-function DebugJob:start(args)
-    assert(#self._sessions == 0, "already started")
-    local ok, err = self:add_new_session(args.name, args.debug_args)
-    if not ok then
-        self._trackers:invoke("on_startup_error")
-    end
+function DebugJob:start(args, tracker)
+    assert(#self._session_data == 0 and not self._tracker, "already started")
+    self._tracker = tracker
+    local ok, err = self:_add_new_session(args.name, args.debug_args)
     return ok, err
 end
 
@@ -94,18 +92,23 @@ end
 ---@param debug_args loopdebug.session.DebugArgs
 ---@param parent_sess_id number|nil
 ---@return boolean,string|nil
-function DebugJob:add_new_session(name, debug_args, parent_sess_id)
-    local session_id           = _last_session_id + 1
-    _last_session_id           = session_id
+function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
+    local session_id = _last_session_id + 1
+    _last_session_id = session_id
+
+    local page_group = self._page_manager.add_page_group(name)
+    if not page_group then
+        return false, "failed to create page group"
+    end
 
     ---@param session loopdebug.Session
     ---@param event loop.session.TrackerEvent
     ---@param event_data any
-    local tracker              = function(session, event, event_data)
+    local tracker                  = function(session, event, event_data)
         self:_on_session_event(session_id, session, event, event_data)
     end
 
-    local exit_handler         = function(code)
+    local exit_handler             = function(code)
         -- schedule so that it does not happen before on_sess_added event
         vim.schedule(function()
             self:_session_exit_handler(session_id, code)
@@ -113,19 +116,22 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
     end
 
     ---@type loopdebug.session.Args
-    local session_args         = {
+    local session_args             = {
         debug_args = debug_args,
         tracker = tracker,
         exit_handler = exit_handler,
     }
 
     -- start new session
-    local session              = Session:new(name)
+    local session                  = Session:new(name)
 
-    self._sessions[session_id] = session
+    self._session_data[session_id] = {
+        session = session,
+        page_group = page_group
+    }
 
     ---@type loop.job.DebugJob.SessionController
-    local controller           = {
+    local controller               = {
         pause = function(thread_id) session:debug_pause(thread_id) end,
         continue = function(thread_id, all_threads) session:debug_continue(thread_id, all_threads) end,
         step_in = function(thread_id) session:debug_stepIn(thread_id) end,
@@ -135,18 +141,20 @@ function DebugJob:add_new_session(name, debug_args, parent_sess_id)
         terminate = function() session:debug_terminate() end,
     }
 
-    local data_providers       = session:get_data_providers()
+    local data_providers           = session:get_data_providers()
 
     for _, bp in pairs(self._breakpoints) do
         session:set_source_breakpoint(bp)
     end
 
-    self._trackers:invoke("on_sess_added", session_id, name, parent_sess_id, controller, data_providers)
+    self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
 
     local started, start_err = session:start(session_args)
     if not started then
         return false, "Failed to start debug session, " .. start_err
     end
+
+    self:_setup_repl(session_id, name, controller, data_providers)
 
     return true, nil
 end
@@ -155,8 +163,8 @@ end
 function DebugJob:update_breakpoint(bp)
     if bp.enabled then
         self._breakpoints[bp.id] = bp
-        for _, s in pairs(self._sessions) do
-            s:set_source_breakpoint(bp)
+        for _, data in pairs(self._session_data) do
+            data.session:set_source_breakpoint(bp)
         end
     else
         self:remove_breakpoint(bp)
@@ -166,28 +174,28 @@ end
 ---@param bp loopdebug.SourceBreakpoint
 function DebugJob:remove_breakpoint(bp)
     self._breakpoints[bp.id] = nil
-    for _, s in pairs(self._sessions) do
-        s:remove_breakpoint(bp.id)
+    for _, data in pairs(self._session_data) do
+        data.session:remove_breakpoint(bp.id)
     end
 end
 
 ---@param removed loopdebug.SourceBreakpoint[]
 function DebugJob:remove_all_breakpoints(removed)
     self._breakpoints = {}
-    for _, s in pairs(self._sessions) do
-        s:remove_all_breakpoints()
+    for _, data in pairs(self._session_data) do
+        data.session:remove_all_breakpoints()
     end
 end
 
 function DebugJob:_session_exit_handler(session_id, code)
     vim.schedule(function()
-        if self._sessions[session_id] then
-            local session = self._sessions[session_id]
-            self:add_debug_output(session_id, session:name(), "log", "Debug session ended")
-            self._trackers:invoke("on_sess_removed", session_id, session:name())
-            self._sessions[session_id] = nil
-            if next(self._sessions) == nil then
-                self._trackers:invoke("on_exit", code)
+        if self._session_data[session_id] then
+            local session = self._session_data[session_id].session
+            self:_add_debug_output(session_id, session:name(), "log", "Debug session ended")
+            self._tracker.on_sess_removed(session_id, session:name())
+            self._session_data[session_id] = nil
+            if next(self._session_data) == nil then
+                self._tracker.on_exit(code)
             end
         end
     end)
@@ -203,27 +211,27 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
         local trace = event_data
         local text = trace.text
         if trace.level then text = trace.level .. ": " .. trace.text end
-        self:add_debug_output(sess_id, session:name(), "log", text)
+        self:_add_debug_output(sess_id, session:name(), "log", text)
         return
     end
     if event == "state" then
         ---@type loopdebug.session.notify.StateData
         local state = event_data
-        self._trackers:invoke("on_sess_state", sess_id, session:name(), state)
+        self._tracker.on_sess_state(sess_id, session:name(), state)
         return
     end
     if event == "output" then
         ---@type loopdebug.proto.OutputEvent
         local output = event_data
         if output.category ~= "telemetry" then
-            self:add_debug_output(sess_id, session:name(), tostring(output.category), tostring(output.output))
+            self:_add_debug_output(sess_id, session:name(), tostring(output.category), tostring(output.output))
         end
         return
     end
     if event == "runInTerminal_request" then
         ---@type loopdebug.session.notify.RunInTerminalReq
         local request = event_data
-        self:add_debug_term(session:name(), request.args, request.on_success, request.on_failure)
+        self:add_debug_term(sess_id, session:name(), request.args, request.on_success, request.on_failure)
         return
     end
     if event == "threads_paused" then
@@ -231,7 +239,7 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
         return
     end
     if event == "threads_continued" then
-        self._trackers:invoke("on_thread_continue", sess_id, session:name(), event_data)
+        self._tracker.on_thread_continue(sess_id, session:name(), event_data)
         return
     end
     if event == "breakpoints" then
@@ -258,55 +266,43 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
 end
 
 ---@param sess_id number
----@param sess_name string
----@param category string
----@param output string
-function DebugJob:add_debug_output(sess_id, sess_name, category, output)
-    self._trackers:invoke("on_output", sess_id, sess_name, category, output)
-end
-
 ---@param name string
 ---@param args loopdebug.proto.RunInTerminalRequestArguments
 ---@param on_success fun(pid:number)
 ---@param on_failure fun(reason:string)
-function DebugJob:add_debug_term(name, args, on_success, on_failure)
+function DebugJob:add_debug_term(sess_id, name, args, on_success, on_failure)
     --vim.notify(vim.inspect{name, args, on_success, on_failure})
-
     assert(type(name) == "string")
     assert(type(args) == "table")
     assert(type(on_success) == "function")
     assert(type(on_failure) == "function")
 
-    local cb_error = function(err)
-        on_failure("reversed request handler error")
-        self._log:error("Error in on_new_term tracker\n" ..
-            debug.traceback("Error: " .. tostring(err) .. "\n", 2))
-    end
+    local session_data = self._session_data[sess_id]
+    assert(session_data)
 
-    xpcall(function()
-        self._trackers:invoke("on_new_term", name, args, function(pid, err)
-            if err then
-                on_failure(err)
-                self._log:error("Error in on_new_term handling\n" .. err)
-            else
-                on_success(pid)
-            end
-        end)
-    end, cb_error)
+    local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
+    local pd, err = session_data.page_group.add_page({
+        type = "term",
+        buftype = "loopdebug-term",
+        label = "Output",
+        term_args = start_args,
+        activate = true
+    })
+    if pd and pd.term_proc then on_success(pd.term_proc:get_pid()) else on_failure(err or "term startup error") end
 end
 
 ---@param sess_id number
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
 function DebugJob:_on_session_threads_pause(sess_id, sess_name, event_data)
-    self._trackers:invoke("on_thread_pause", sess_id, sess_name, event_data)
+    self._tracker.on_thread_pause(sess_id, sess_name, event_data)
 end
 
 ---@param sess_id number
 ---@param session loopdebug.Session
 ---@param event loopdebug.session.notify.BreakpointsEvent
 function DebugJob:_on_session_breakpoints_event(sess_id, session, event)
-    self._trackers:invoke("on_breakpoint_event", sess_id, session, event, event)
+    self._tracker.on_breakpoint_event(sess_id, session:name(), event)
 end
 
 ---@param sess_id number
@@ -320,12 +316,104 @@ end
 function DebugJob:_on_subsession_request(sess_id, session, request)
     self._log:debug("Starting subsession via startDebugging: " .. vim.inspect(request))
 
-    local ok, err = self:add_new_session(request.name, request.debug_args, sess_id)
+    local ok, err = self:_add_new_session(request.name, request.debug_args, sess_id)
     if not ok then
         return request.on_failure("failed to startup child session, " .. tostring(err))
     end
 
     request.on_success({})
+end
+
+---@param sesion_id number
+---@param session_name string
+---@param controller loop.job.DebugJob.SessionController
+---@param data_providers loopdebug.session.DataProviders
+function DebugJob:_setup_repl(sesion_id, session_name, controller, data_providers)
+    local session_data = self._session_data[sesion_id]
+    assert(session_data)
+
+    -- Setup REPL
+    local page_data = session_data.page_group.add_page({
+        type = "repl",
+        buftype = "loopdebug-repl",
+        label = "Console",
+        activate = false
+    })
+
+    if not page_data then
+        return
+    end
+
+    session_data.repl_ctrl = page_data.repl_buf
+    session_data.repl_ctrl.set_input_handler(function(input)
+        data_providers.evaluate_provider({
+            expression = input,
+            context = "repl",
+        }, function(eval_err, data)
+            if not data then
+                local msg = eval_err or "Evaluation error"
+                session_data.repl_ctrl.add_output("\27[31m" .. msg .. "\27[0m")
+            else
+                session_data.repl_ctrl.add_output(tostring(data.result))
+            end
+        end)
+    end)
+    session_data.repl_ctrl.set_completion_handler(function(input, callback)
+        data_providers.completion_provider({
+            text = input,
+            column = #input + 1,
+            frameId = nil, -- is frameId needed?
+        }, function(compl_err, data)
+            if data then
+                local strs = {}
+                for _, item in ipairs(data.targets or {}) do
+                    local str = item.text or item.label
+                    if str then table.insert(strs, str) end
+                end
+                callback(strs)
+            else
+                callback(nil, compl_err)
+            end
+        end)
+    end)
+end
+
+---@param sess_id number
+---@param sess_name string
+---@param category string
+---@param output string
+function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
+    ---@type loopdebug.DebugJob.SessionData?
+    local sess_data = self._session_data[sess_id]
+    assert(sess_data)
+
+    -- REPL Output
+    if category ~= "stdout" and category ~= "stderr" then
+        if sess_data.repl_ctrl then
+            for line in output:gmatch("([^\r\n]*)\r?\n?") do
+                if line ~= "" then sess_data.repl_ctrl.add_output(line) end
+            end
+        end
+        return
+    end
+
+    -- Process Output
+    if not sess_data.debuggee_output_ctrl then
+        local page_data = sess_data.page_group.add_page({ buftype = "loopdebug-output", type = "output", label =
+        sess_name })
+        if page_data then
+            sess_data.debuggee_output_ctrl = page_data.output_buf
+        end
+    end
+
+    if sess_data.debuggee_output_ctrl then
+        --local highlight = (category == "stderr") and "ErrorMsg" or nil -- TODO
+        for line in output:gmatch("([^\r\n]*)\r?\n?") do
+            if line ~= "" then
+                sess_data.debuggee_output_ctrl.add_lines(line)
+            end
+        end
+    end
 end
 
 return DebugJob

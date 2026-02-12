@@ -16,38 +16,15 @@ local _repl_page_group = nil
 local _output_page_group = nil
 
 ---@param task_name string
----@param page_manager loop.PageManager
 ---@param on_exit fun(code : number)
 ---@return loop.job.debugjob.Tracker
-local function _create_job_tracker(task_name, page_manager, on_exit)
+local function _create_job_tracker(task_name, on_exit)
     assert(type(task_name) == "string")
-
-    if not _sessionlist_comp then
-        local page_data = page_manager.add_page_group("Debug Sessions").add_page({
-            type = "comp",
-            buftype = "loopdebug-sessions",
-            label = "Debug Sessions",
-            activate = true,
-        })
-        assert(page_data)
-        _sessionlist_comp = SessionList:new()
-        _sessionlist_comp:link_to_buffer(page_data.comp_buf)
-        _sessionlist_comp:set_page(page_data.page)
-        if not _repl_page_group then
-            _repl_page_group = page_manager.add_page_group("Debug Console")
-        end
-        if not _output_page_group then
-            _output_page_group = page_manager.add_page_group("Debug Output")
-        end
-    end
-    assert(_repl_page_group)
-    assert(_output_page_group)
 
     ---@type loop.job.debugjob.Tracker
     return {
         on_sess_added = function(id, name, pid, ctrl, prov)
-            manager.add_session(id, name, pid, ctrl, prov,
-                _repl_page_group, _output_page_group)
+            manager.add_session(id, name, pid, ctrl, prov)
         end,
         on_sess_removed = function(id, name)
             manager.remove_session(id, name)
@@ -55,25 +32,11 @@ local function _create_job_tracker(task_name, page_manager, on_exit)
         on_sess_state = function(id, name, data)
             manager.on_session_state_update(id, name, data)
         end,
-        on_output = function(id, name, cat, out)
-            manager.on_session_output(id, name, cat, out)
-        end,
         on_thread_pause = function(id, name, data)
             manager.on_session_thread_pause(id, name, data)
         end,
         on_thread_continue = function(id, name, data)
             manager.on_session_thread_continue(id, name, data)
-        end,
-        on_new_term = function(name, args, cb)
-            local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
-            local pd, err = _output_page_group.add_page({
-                type = "term",
-                buftype = "loopdebug-term",
-                label = name,
-                term_args = start_args,
-                activate = true
-            })
-            if pd and pd.term_proc then cb(pd.term_proc:get_pid(), nil) else cb(nil, err) end
         end,
         on_breakpoint_event = function(sess_id, sess_name, event)
             manager.on_breakpoint_event(sess_id, event)
@@ -102,7 +65,7 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     end
 
     logs.log("Starting debug:\n" .. vim.inspect(args))
-    local job = DebugJob:new(args.name)
+    local job = DebugJob:new(args.name, page_manager)
 
     local bpts_tracker_ref = breakpoints.add_tracker({
         on_set = function(bp) job:update_breakpoint(bp) end,
@@ -113,14 +76,13 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
         on_all_removed = function(bpts) job:remove_all_breakpoints(bpts) end
     })
 
-    -- Add trackers
-    job:add_tracker(_create_job_tracker(args.name, page_manager, function(code)
+    local tracker = _create_job_tracker(args.name, function(code)
         bpts_tracker_ref:cancel()
         exit_handler(code)
-    end))
+    end)
 
     -- Start the debug job
-    local ok, err = job:start(args)
+    local ok, err = job:start(args, tracker)
     if not ok then
         return startup_callback(nil, err or "failed to start debug job")
     end
@@ -135,6 +97,7 @@ end
 ---@type fun(ws_dir:string,task:loopdebug.Task,page_manager:loop.PageManager, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
 function M.start_debug_task(ws_dir, task, page_manager, on_exit)
     assert(type(ws_dir) == "string")
+    assert(type(task.debugger) == "string")
     -- Early validation
     if not task or type(task) ~= "table" then
         return nil, "task is required and must be a table"
@@ -152,7 +115,7 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
     ---@type loopdebug.Config.Debugger
     local debugger = config.current.debuggers[task.debugger]
     if not debugger then
-        return nil, ("no debugger config found for task.debugger '%s'"):format(tostring(task.debugger))
+        return nil, ("no debugger config found for task.debugger '%s'"):format(task.debugger)
     end
 
     ---- debug adapter config ---

@@ -15,7 +15,7 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field frame loopdebug.proto.StackFrame
 
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
----@field new fun(self: loopdebug.comp.Variables, name:string): loopdebug.comp.Variables
+---@field new fun(self: loopdebug.comp.Variables): loopdebug.comp.Variables
 local Variables    = class(ItemTreeComp)
 
 ---@param parent_id any

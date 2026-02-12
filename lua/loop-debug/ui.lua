@@ -4,94 +4,56 @@ local persistence     = require('loop-debug.persistence')
 local CompBuffer      = require('loop.buf.CompBuffer')
 local VariablesComp   = require('loop-debug.comp.Variables')
 local StackTraceComp  = require('loop-debug.comp.StackTrace')
+local SessionListComp = require('loop-debug.comp.SessionList')
 
 local _init_done      = false
-
 local _ui_auto_group  = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear = true })
 
----@type loop.comp.CompBuffer?
-local _vars_compbuffer
+-- ======================================
+-- State
+-- ======================================
 
----@type loop.comp.CompBuffer?
-local _stack_compbuffer
+local _windows        = {} -- ordered array of winids
+local _buffers        = {} -- [index] = CompBuffer
+local _components     = {} -- [index] = component instance
 
----@type loopdebug.comp.Variables?
-local _variables_comp
+-- ======================================
+-- Window Definitions (ORDER MATTERS)
+-- ======================================
 
----@type loopdebug.comp.StackTrace?
-local _stacktrace_comp
+local _window_defs    = {
+    {
+        key                  = "variables",
+        label                = "Variables",
+        buf_type             = "loopdebug-vars",
+        comp_class           = VariablesComp,
 
--- Configuration and State Storage
-local _default_layout = {
-    width_ratio = 0.20,
-    top_ratio = 0.5,
+        -- layout defaults
+        default_width_ratio  = 0.20,
+        default_height_ratio = 0.50,
+    },
+    {
+        key = "callstack",
+        label = "Call Stack",
+        buf_type = "loopdebug-callstack",
+        comp_class = StackTraceComp,
+
+        default_height_ratio = 0.30,
+    },
+    {
+        key = "sessions",
+        label = "Sessions",
+        buf_type = "loopdebug-sessions",
+        comp_class = SessionListComp,
+        -- last window does not need height ratio
+    }
 }
 
----@param winid number
-local function _save_layout(winid)
-    local total_cols = vim.o.columns
-    local total_lines = vim.o.lines
-    local w = vim.api.nvim_win_get_width(winid)
-    local h = vim.api.nvim_win_get_height(winid)
-    local is_width_valid = w < math.floor(total_cols * 0.6)
-    local is_height_valid = h < math.floor(total_lines * 0.9)
+local KEY_MARKER      = "loopdebugplugin_debugpanel"
 
-    local layout = {}
-    if is_width_valid then layout.width_ratio = (w / vim.o.columns) end
-    if is_height_valid then layout.top_ratio = (h / vim.o.lines) end
-    persistence.set_config("layout", layout)
-end
-
-local function _destroy_components()
-    if _vars_compbuffer then
-        _vars_compbuffer:destroy()
-        _vars_compbuffer = nil
-    end
-
-    if _stack_compbuffer then
-        _stack_compbuffer:destroy()
-        _stack_compbuffer = nil
-    end
-
-    if _variables_comp then
-        _variables_comp:dispose()
-        _variables_comp = nil
-    end
-    if _stacktrace_comp then
-        _stacktrace_comp:dispose()
-        _stacktrace_comp = nil
-    end
-end
-
----@param vars_winid number
----@param stack_winid number
-local function _create_components(vars_winid, stack_winid)
-    _destroy_components()
-    assert(not _vars_compbuffer and not _stack_compbuffer)
-    assert(not _variables_comp and not _stacktrace_comp)
-
-    _vars_compbuffer = CompBuffer:new("loopdebug-vars", "Variables")
-    _stack_compbuffer = CompBuffer:new("loopdebug-callstack", "Call Stack")
-
-    vim.wo[vars_winid].winfixbuf = false
-    vim.api.nvim_win_set_buf(vars_winid, (_vars_compbuffer:get_or_create_buf()))
-    vim.wo[vars_winid].winfixbuf = true
-
-    vim.wo[stack_winid].winfixbuf = false
-    vim.api.nvim_win_set_buf(stack_winid, (_stack_compbuffer:get_or_create_buf()))
-    vim.wo[stack_winid].winfixbuf = true
-
-    _variables_comp = VariablesComp:new("Variables")
-    _stacktrace_comp = StackTraceComp:new("Call Stack")
-
-    _variables_comp:link_to_buffer(_vars_compbuffer:make_controller())
-    _stacktrace_comp:link_to_buffer(_stack_compbuffer:make_controller())
-end
-
-
--- Unique keys for window variables
-local KEY_MARKER = "loopdebugplugin_debugpanel"
-local KEY_TYPE   = "loopdebugplugin_panel_type" -- "TOP" or "BOTTOM"
+-- ======================================
+-- Helpers
+-- ======================================
 
 local function is_managed_window(win_id)
     if not vim.api.nvim_win_is_valid(win_id) then return false end
@@ -109,99 +71,191 @@ local function get_managed_windows()
     return found
 end
 
+-- ======================================
+-- Layout Persistence (N - 1 heights)
+-- ======================================
+
+local function _save_layout()
+    if #_windows == 0 then return end
+
+    local total_cols  = vim.o.columns
+    local total_lines = vim.o.lines
+
+    local layout      = {
+        width_ratio = vim.api.nvim_win_get_width(_windows[1]) / total_cols,
+        heights     = {},
+    }
+
+    -- save height ratios for first N-1 windows
+    for i = 1, (#_windows - 1) do
+        local h = vim.api.nvim_win_get_height(_windows[i])
+        layout.heights[i] = h / total_lines
+    end
+
+    persistence.set_config("layout", layout)
+end
+
+-- ======================================
+-- Component Lifecycle
+-- ======================================
+
+local function _destroy_components()
+    for i, buf in pairs(_buffers) do
+        buf:destroy()
+        _buffers[i] = nil
+    end
+
+    for i, comp in pairs(_components) do
+        if comp.dispose then
+            comp:dispose()
+        end
+        _components[i] = nil
+    end
+end
+
+local function _create_components()
+    _destroy_components()
+
+    for i, def in ipairs(_window_defs) do
+        local winid = _windows[i]
+
+        local compbuf = CompBuffer:new(def.buf_type, def.label)
+        _buffers[i] = compbuf
+
+        vim.wo[winid].winfixbuf = false
+        vim.api.nvim_win_set_buf(winid, (compbuf:get_or_create_buf()))
+        vim.wo[winid].winfixbuf = true
+
+        if def.comp_class then
+            local comp = def.comp_class:new()
+            comp:link_to_buffer(compbuf:make_controller())
+            _components[i] = comp
+        end
+    end
+end
+
+-- ======================================
+-- Show (Fully Generic)
+-- ======================================
+
 function M.show()
-    local managed = get_managed_windows()
-    if #managed > 0 then
+    if #get_managed_windows() > 0 then
         return
     end
 
     assert(_init_done)
 
     if not persistence.is_ws_open() then
-        vim.notify("loopdebug: No active worksapce", vim.log.levels.WARN)
+        vim.notify("loopdebug: No active workspace", vim.log.levels.WARN)
         return
     end
 
-    local layout = vim.tbl_deep_extend("force", _default_layout, persistence.get_config("layout") or {})
+    local saved = persistence.get_config("layout") or {}
+
+    local width_ratio =
+        saved.width_ratio
+        or _window_defs[1].default_width_ratio
+        or 0.50
+
+    local height_ratios = saved.heights or {}
 
     local original_win = vim.api.nvim_get_current_win()
 
-    -- 1. Create the Vertical container
+    -- Create vertical container (first window)
     vim.cmd("topleft vsplit")
-    local top_win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_width(top_win, math.floor(layout.width_ratio * vim.o.columns))
+    local first_win = vim.api.nvim_get_current_win()
 
-    -- 2. Create the Horizontal split
-    vim.cmd("below split")
-    local bottom_win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_width(
+        first_win,
+        math.floor(width_ratio * vim.o.columns)
+    )
 
-    -- 3. Restore Height with validation
-    local height = math.floor(vim.o.lines * layout.top_ratio)
-    vim.api.nvim_win_set_height(top_win, height)
+    table.insert(_windows, first_win)
 
-    local config_map = {
-        [top_win] = "TOP",
-        [bottom_win] = "BOTTOM"
-    }
+    -- Create remaining windows
+    for i = 2, #_window_defs do
+        vim.cmd("below split")
+        local win = vim.api.nvim_get_current_win()
+        table.insert(_windows, win)
+    end
 
-    for win, type_name in pairs(config_map) do
-        -- Visuals
-        vim.wo[win].wrap = false
-        vim.wo[win].spell = false
-        -- WinVars
-        vim.w[win][KEY_MARKER] = true
-        vim.w[win][KEY_TYPE] = type_name
-        -- Constraints
-        vim.wo[win].winfixbuf = true
+    -- Apply height ratios for first N-1 windows
+    for i = 1, (#_windows - 1) do
+        local ratio =
+            height_ratios[i]
+            or _window_defs[i].default_height_ratio
+
+        if ratio then
+            vim.api.nvim_set_current_win(_windows[i])
+            vim.api.nvim_win_set_height(
+                _windows[i],
+                math.floor(ratio * vim.o.lines)
+            )
+        end
+    end
+
+    -- Configure windows
+    for i, win in ipairs(_windows) do
+        vim.wo[win].wrap        = false
+        vim.wo[win].spell       = false
+        vim.wo[win].winfixbuf   = true
         vim.wo[win].winfixwidth = true
-        vim.wo[win].winfixheight = true
+        --vim.wo[win].winfixheight = true
+
+        vim.w[win][KEY_MARKER]  = true
     end
 
     if vim.api.nvim_win_is_valid(original_win) then
         vim.api.nvim_set_current_win(original_win)
     end
 
+    _create_components()
+
+    -- Resize tracking
     vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
     vim.api.nvim_create_autocmd("WinResized", {
         group = _ui_auto_group,
         callback = function()
-            -- v.event.windows contains IDs of all windows that changed size
-            local targets = vim.v.event.windows
-            for _, winid in ipairs(targets or {}) do
-                if is_managed_window(winid) then
-                    local type = vim.w[winid].loopdebugplugin_panel_type
-                    if type == "TOP" then
-                        _save_layout(winid)
-                    end
-                end
+            if #_windows > 0 then
+                _save_layout()
             end
         end,
     })
-
-    _create_components(top_win, bottom_win)
 end
 
+-- ======================================
+-- Hide / Toggle
+-- ======================================
+
 function M.hide()
-    local managed = get_managed_windows()
     vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
-    for _, win in ipairs(managed) do
-        vim.api.nvim_win_close(win, true)
+
+    for _, win in ipairs(_windows) do
+        if vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_win_close(win, true)
+        end
     end
+
+    _windows = {}
     _destroy_components()
 end
 
 function M.toggle()
-    local managed = get_managed_windows()
-    if #managed > 0 then
+    if #get_managed_windows() > 0 then
         M.hide()
-        return
+    else
+        M.show()
     end
-    M.show()
 end
+
+-- ======================================
+-- Init
+-- ======================================
 
 function M.init()
     if _init_done then return end
     _init_done = true
+
     persistence.add_tracker({
         on_ws_unload = function()
             M.hide()
