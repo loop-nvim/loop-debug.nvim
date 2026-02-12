@@ -38,6 +38,7 @@ local _breakpoints_data = {}
 ---@param wsdir string
 local function _format_breakpoint(bp, verified, wsdir)
     local symbols = config.current.symbols
+    assert(symbols)
 
     local symbol
     if bp.enabled == false then
@@ -273,6 +274,7 @@ function M.init()
     vim.api.nvim_set_hl(0, highlight, { link = "Debug" })
 
     local symbols = config.current.symbols
+    assert(symbols)
 
     _sign_group = loopsigns.define_group("Breakpoints", {priority = config.current.sign_priority.breakpoints},
         function(file, signs)

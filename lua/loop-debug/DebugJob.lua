@@ -1,6 +1,6 @@
-local class    = require('loop.tools.class')
-local Session  = require('loop-debug.dap.Session')
-local Trackers = require("loop.tools.Trackers")
+local class            = require('loop.tools.class')
+local Session          = require('loop-debug.dap.Session')
+local Trackers         = require("loop.tools.Trackers")
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -41,9 +41,10 @@ local Trackers = require("loop.tools.Trackers")
 ---@class loop.job.DebugJob
 ---@field new fun(self: loop.job.DebugJob, name:string) : loop.job.DebugJob
 ---@field _sessions table<number,loopdebug.Session>
----@field _last_session_id number
 ---@field _trackers loop.tools.Trackers<loop.job.debugjob.Tracker>
-local DebugJob = class()
+local DebugJob         = class()
+
+local _last_session_id = 0
 
 ---Initializes the DebugJob instance.
 ---@param name string
@@ -51,11 +52,8 @@ function DebugJob:init(name)
     self._log = require('loop-debug.tools.Logger').create_logger("DebugJob[" .. tostring(name) .. "]")
     ---@type table<number,loopdebug.Session>
     self._sessions = {}
-    self._last_session_id = 0
     ---@type table<number,loopdebug.SourceBreakpoint>
     self._breakpoints = {}
-    self._output_pages = {}
-    self._stacktrace_pages = {}
     self._trackers = Trackers:new()
 end
 
@@ -97,8 +95,8 @@ end
 ---@param parent_sess_id number|nil
 ---@return boolean,string|nil
 function DebugJob:add_new_session(name, debug_args, parent_sess_id)
-    local session_id           = self._last_session_id + 1
-    self._last_session_id      = session_id
+    local session_id           = _last_session_id + 1
+    _last_session_id           = session_id
 
     ---@param session loopdebug.Session
     ---@param event loop.session.TrackerEvent
