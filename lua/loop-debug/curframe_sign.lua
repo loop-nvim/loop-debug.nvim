@@ -26,7 +26,7 @@ local _sign_name           = "currentframe"
 local _init_done           = false
 local _query_context       = 0
 
-local _vars_max_value_len  = 25
+local _vars_max_value_len  = 30
 local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
 local _vars_extmark_id     = 0
 
