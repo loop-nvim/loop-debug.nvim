@@ -145,14 +145,11 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
     end
 
     -- request config
-    local terminate_on_disconnect = task.terminateOnDisconnect
     local request_args
     if task.request == "launch" then
         request_args = debugger.launch_args or {}
-        if terminate_on_disconnect == nil then terminate_on_disconnect = true end
     else
         request_args = debugger.attach_args or {}
-        if terminate_on_disconnect == nil then terminate_on_disconnect = false end
     end
 
     if type(request_args) == "function" then
@@ -168,6 +165,11 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
     else
         -- deep copy because a badly coded hook may change the args
         request_args = vim.deepcopy(request_args)
+    end
+
+    local terminate_on_disconnect = task.terminateOnDisconnect
+    if terminate_on_disconnect == nil and task.request == "launch" then
+        terminate_on_disconnect = true
     end
 
     -- job args
