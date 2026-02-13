@@ -8,13 +8,6 @@ local breakpoints = require('loop-debug.breakpoints')
 local fntools = require('loop.tools.fntools')
 local logs = require('loop.logs')
 
----@type loop.comp.ItemList?
-local _sessionlist_comp = nil
----@type loop.PageGroup?
-local _repl_page_group = nil
----@type loop.PageGroup?
-local _output_page_group = nil
-
 ---@param task_name string
 ---@param on_exit fun(code : number)
 ---@return loop.job.debugjob.Tracker

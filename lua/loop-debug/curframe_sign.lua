@@ -26,7 +26,7 @@ local _sign_name           = "currentframe"
 local _init_done           = false
 local _query_context       = 0
 
-local _vars_max_value_len  = 30
+local _max_var_pill_size   = 30
 local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
 local _vars_extmark_id     = 0
 
@@ -153,19 +153,18 @@ local function _place_variables_virttext(frame, data)
     --------------------------------------------------------------------
     local function place_value(id_node, name, value)
         local display = tostring(value)
+        local name_len = #name
+        local display_len = #display
+        if name_len + display_len > _max_var_pill_size then
+            name_len = _max_var_pill_size - display_len
+            name_len = math.max(7, name_len)
+            display_len = math.min(display_len, _max_var_pill_size - name_len - 2)
+        end
         local text = string.format(
             "%s: %s",
-            name,
-            display
+            strtools.crop_string_for_ui(name, name_len),
+            strtools.crop_string_for_ui(display, display_len)
         )
-        if #text > _vars_max_value_len then
-            text = string.format(
-                "%s: %s",
-                strtools.crop_string_for_ui(name, math.floor(_vars_max_value_len / 3)),
-                display
-            )
-            text = strtools.crop_string_for_ui(text, _vars_max_value_len)
-        end
 
         local sr, _, _, _ = id_node:range() -- 0-based
 

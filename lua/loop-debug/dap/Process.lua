@@ -155,7 +155,6 @@ function Process:terminate(timeout)
         if self.handle and not self.handle:is_closing() then
             vim.notify("DAP process did not terminate cleanly")
             self.handle:kill("sigkill")
-            self:_close_all() -- cleanup
         end
     end, 10000)
 end
