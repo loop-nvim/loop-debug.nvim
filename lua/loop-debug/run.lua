@@ -45,10 +45,10 @@ end
 
 
 ---@param args loop.DebugJob.StartArgs
----@param page_manager loop.PageManager
+---@param page_group loop.PageGroup
 ---@param startup_callback fun(job: loop.job.DebugJob|nil, err: string|nil)
 ---@param exit_handler fun(code: number)
-local function _start_debug_job(args, page_manager, startup_callback, exit_handler)
+local function _start_debug_job(args, page_group, startup_callback, exit_handler)
     -- Final DAP type validation
     if args.debug_args.adapter.type ~= "executable" and args.debug_args.adapter.type ~= "server" then
         return startup_callback(nil,
@@ -58,7 +58,7 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
     end
 
     logs.log("Starting debug:\n" .. vim.inspect(args))
-    local job = DebugJob:new(args.name, page_manager)
+    local job = DebugJob:new(args.name, page_group)
 
     local bpts_tracker_ref = breakpoints.add_tracker({
         on_set = function(bp) job:update_breakpoint(bp) end,
@@ -87,8 +87,8 @@ local function _start_debug_job(args, page_manager, startup_callback, exit_handl
 end
 
 
----@type fun(ws_dir:string,task:loopdebug.Task,page_manager:loop.PageManager, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
-function M.start_debug_task(ws_dir, task, page_manager, on_exit)
+---@type fun(ws_dir:string,task:loopdebug.Task,page_group:loop.PageGroup, on_exit:loop.TaskExitHandler):(loop.TaskControl|nil,string|nil)
+function M.start_debug_task(ws_dir, task, page_group, on_exit)
     assert(type(ws_dir) == "string")
     assert(type(task.debugger) == "string")
     -- Early validation
@@ -182,7 +182,7 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
         task = task,
         ws_dir = ws_dir,
         adapter_config = adapter_config,
-        page_manager = page_manager,
+        page_group = page_group,
         user_data = {}
     }
 
@@ -222,7 +222,7 @@ function M.start_debug_task(ws_dir, task, page_manager, on_exit)
                 on_exit(code == 0, "Exit code: " .. tostring(code))
             end
         end
-        _start_debug_job(start_args, page_manager, on_job_start, on_job_exit)
+        _start_debug_job(start_args, page_group, on_job_start, on_job_exit)
     end
 
     if debugger.start_hook then

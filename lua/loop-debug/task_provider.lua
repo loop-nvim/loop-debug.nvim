@@ -11,9 +11,9 @@ function M.get_task_type_provider(ext_data)
             local schema = require('loop-debug.schema')
             return schema
         end,
-        start_one_task = function(task, page_manager, on_exit)
+        start_one_task = function(task, page_group, on_exit)
             ---@cast task loopdebug.Task
-            return run.start_debug_task(ext_data.ws_dir, task, page_manager, on_exit)
+            return run.start_debug_task(ext_data.ws_dir, task, page_group, on_exit)
         end,
         on_tasks_cleanup = function()
             --ui.hide()

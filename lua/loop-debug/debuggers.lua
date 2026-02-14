@@ -22,7 +22,7 @@ end
 ---@field task loopdebug.Task
 ---@field ws_dir string
 ---@field adapter_config loopdebug.AdapterConfig
----@field page_manager loop.PageManager
+---@field page_group loop.PageGroup
 ---@field exit_code number|nil
 ---@field user_data any
 
@@ -227,11 +227,9 @@ debuggers["js-debug"] = {
     start_hook = function(context, callback)
         local task = context.task
         local port = (type(task.port) == "number" and task.port) or 0
-
         context.user_data.exit_handler = function(_)
             callback(false, "debug server stopped unexpectedly")
         end
-
         context.user_data.output_handler = function(_, data)
             if data then
                 for _, line in ipairs(data) do
@@ -245,7 +243,6 @@ debuggers["js-debug"] = {
                 end
             end
         end
-
         local args = {
             name = "dapDebugServer.js",
             command = {
@@ -266,14 +263,7 @@ debuggers["js-debug"] = {
                 end
             end
         }
-
-        local page_group = context.page_manager.add_page_group("Debug Server")
-        if not page_group then
-            callback(false, "failed to create page group")
-            return
-        end
-
-        local page_data, page_err = page_group.add_page({
+        local page_data, page_err = context.page_group.add_page({
             type = "term",
             buftype = "loopdebug-term",
             label = "Debug Server",

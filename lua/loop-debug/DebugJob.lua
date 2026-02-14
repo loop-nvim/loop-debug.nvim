@@ -36,14 +36,13 @@ local Session          = require('loop-debug.dap.Session')
 
 ---@class loopdebug.DebugJob.SessionData
 ---@field session loopdebug.Session
----@field page_group loop.PageGroup
 ---@field repl_ctrl loop.ReplController?
 ---@field debuggee_output_ctrl loop.OutputBufferController?
 
 ---@class loop.job.DebugJob
----@field new fun(self: loop.job.DebugJob, name:string, page_manager:loop.PageManager) : loop.job.DebugJob
+---@field new fun(self: loop.job.DebugJob, name:string, page_group:loop.PageGroup) : loop.job.DebugJob
 ---@field _name string
----@field _page_manager loop.PageManager
+---@field _page_group loop.PageGroup
 ---@field _session_data table<number,loopdebug.DebugJob.SessionData>
 ---@field _breakpoints table<number,loopdebug.SourceBreakpoint>
 ---@field tracker loop.job.debugjob.Tracker
@@ -53,11 +52,11 @@ local _last_session_id = 0
 
 ---Initializes the DebugJob instance.
 ---@param name string
----@param page_manager loop.PageManager
-function DebugJob:init(name, page_manager)
+---@param page_group loop.PageGroup
+function DebugJob:init(name, page_group)
     self._log = require('loop-debug.tools.Logger').create_logger("DebugJob[" .. tostring(name) .. "]")
     self._name = name
-    self._page_manager = page_manager
+    self._page_group = page_group
     self._session_data = {}
     self._breakpoints = {}
 end
@@ -93,13 +92,8 @@ end
 ---@param parent_sess_id number|nil
 ---@return boolean,string|nil
 function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
-    local session_id = _last_session_id + 1
-    _last_session_id = session_id
-
-    local page_group = self._page_manager.add_page_group(name)
-    if not page_group then
-        return false, "failed to create page group"
-    end
+    local session_id               = _last_session_id + 1
+    _last_session_id               = session_id
 
     ---@param session loopdebug.Session
     ---@param event loop.session.TrackerEvent
@@ -127,7 +121,6 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
 
     self._session_data[session_id] = {
         session = session,
-        page_group = page_group
     }
 
     ---@type loop.job.DebugJob.SessionController
@@ -281,7 +274,7 @@ function DebugJob:add_debug_term(sess_id, name, args, on_success, on_failure)
     assert(session_data)
 
     local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
-    local pd, err = session_data.page_group.add_page({
+    local pd, err = self._page_group.add_page({
         type = "term",
         buftype = "loopdebug-term",
         label = "Output",
@@ -333,7 +326,7 @@ function DebugJob:_setup_repl(sesion_id, session_name, controller, data_provider
     assert(session_data)
 
     -- Setup REPL
-    local page_data = session_data.page_group.add_page({
+    local page_data = self._page_group.add_page({
         type = "repl",
         buftype = "loopdebug-repl",
         label = "Console",
@@ -399,7 +392,7 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
 
     -- Process Output
     if not sess_data.debuggee_output_ctrl then
-        local page_data = sess_data.page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output"})
+        local page_data = self._page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output" })
         if page_data then
             sess_data.debuggee_output_ctrl = page_data.output_buf
         end
