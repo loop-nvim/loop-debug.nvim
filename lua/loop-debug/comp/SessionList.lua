@@ -11,18 +11,43 @@ local SessionListComp = class(ItemList)
 ---@param data table
 ---@return loop.comp.ItemList.Chunk[]
 local function _item_formatter(id, data)
-    local chunks = {}
-    -- Main label
-    table.insert(chunks, { tostring(data.label), nil })
+    ---@type loopdebug.events.SessionInfo
+    local info = data.info or {}
 
-    -- Optional paused threads info
-    if data.nb_paused_threads and data.nb_paused_threads > 0 then
-        local s = data.nb_paused_threads > 1 and "s" or ""
-        local paused_text = (" (%d paused thread%s)"):format(data.nb_paused_threads, s)
-        table.insert(chunks, { paused_text, "Comment" })
+    local symbols = config.current.symbols
+    assert(symbols)
+
+    local chunks = {}
+    local nb_paused = info.nb_paused_threads or 0
+    local is_paused = nb_paused > 0
+
+    table.insert(chunks, {
+        is_paused and symbols.paused or symbols.running,
+        is_paused and "DiagnosticWarn" or "DiagnosticOk",
+    })
+    table.insert(chunks, { " ", nil })
+    table.insert(chunks, {
+        tostring(info.name or "unknown"),
+        "Title",
+    })
+    if info.state and info.state ~= "running" then
+        table.insert(chunks, { " ", nil })
+        table.insert(chunks, {
+            "(" .. info.state .. ")",
+            "Comment",
+        })
+    end
+    if nb_paused > 0 then
+        local s = nb_paused > 1 and "s" or ""
+        table.insert(chunks, { " ", nil })
+        table.insert(chunks, {
+            string.format("[%d paused thread%s]", nb_paused, s),
+            "DiagnosticWarn",
+        })
     end
     return chunks
 end
+
 
 function SessionListComp:init()
     ItemList.init(self, {
@@ -99,41 +124,21 @@ function SessionListComp:_refresh()
 
     ---@type loop.comp.ItemList.Item[]
     local list_items = {}
-    local uiflags = ''
-
-    local symbols = config.current.symbols
-    assert(symbols)
 
     for _, sess_id in ipairs(session_ids) do
         local info = self._sessions[sess_id]
-        local nb_paused_threads = info.nb_paused_threads
-        local flag
-        if nb_paused_threads and nb_paused_threads > 0 then
-            flag = symbols.paused
-        else
-            flag = symbols.running
-        end
-        local label = tostring(info.name)
-        if info.state ~= "running" then
-            label = ("%s (%s)"):format(label, info.state)
-        end
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = sess_id,
             ---@class loopdebug.mgr.TaskPageItemData
             data = {
-                label = label,
-                nb_paused_threads = nb_paused_threads,
+                info = info
             }
         }
-        uiflags = uiflags .. flag
         table.insert(list_items, item)
     end
 
     self:set_items(list_items)
-    if self._page then
-        self._page.set_ui_flags(uiflags)
-    end
 end
 
 return SessionListComp
