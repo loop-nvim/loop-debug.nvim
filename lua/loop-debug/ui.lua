@@ -13,7 +13,6 @@ local _ui_auto_group  = vim.api.nvim_create_augroup("LoopDebugPluginUI", { clear
 -- State
 -- ======================================
 
-local _windows        = {} -- ordered array of winids
 local _buffers        = {} -- [index] = CompBuffer
 local _components     = {} -- [index] = component instance
 
@@ -37,7 +36,6 @@ local _window_defs    = {
         label = "Call Stack",
         buf_type = "loopdebug-callstack",
         comp_class = StackTraceComp,
-
         default_height_ratio = 0.30,
     },
     {
@@ -50,6 +48,7 @@ local _window_defs    = {
 }
 
 local KEY_MARKER      = "loopdebugplugin_debugpanel"
+local INDEX_MARKER    = "loopdebugplugin_debugpanelidx"
 
 -- ======================================
 -- Helpers
@@ -61,6 +60,12 @@ local function is_managed_window(win_id)
     return ok and is_managed == true
 end
 
+local function get_window_index(win_id)
+    if not vim.api.nvim_win_is_valid(win_id) then return 1 end
+    local ok, index = pcall(function() return vim.w[win_id][INDEX_MARKER] end)
+    return ok and index or 1
+end
+
 local function get_managed_windows()
     local found = {}
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -68,6 +73,9 @@ local function get_managed_windows()
             table.insert(found, win)
         end
     end
+    table.sort(found, function(a, b)
+        return get_window_index(a) < get_window_index(b)
+    end)
     return found
 end
 
@@ -75,24 +83,98 @@ end
 -- Layout Persistence (N - 1 heights)
 -- ======================================
 
+-- Save the current layout: total height and each window's height
 local function _save_layout()
-    if #_windows == 0 then return end
+    local windows = get_managed_windows()
+    if #windows ~= #_window_defs then return end
 
-    local total_cols  = vim.o.columns
-    local total_lines = vim.o.lines
-
-    local layout      = {
-        width_ratio = vim.api.nvim_win_get_width(_windows[1]) / total_cols,
-        heights     = {},
-    }
-
-    -- save height ratios for first N-1 windows
-    for i = 1, (#_windows - 1) do
-        local h = vim.api.nvim_win_get_height(_windows[i])
-        layout.heights[i] = h / total_lines
+    -- Compute total height and current height ratios
+    local total_lines = 0
+    local current_ratios = {}
+    for i, win in ipairs(windows) do
+        if vim.api.nvim_win_is_valid(win) then
+            local h = vim.api.nvim_win_get_height(win)
+            total_lines = total_lines + h
+            current_ratios[i] = h
+        else
+            return
+        end
     end
 
-    persistence.set_config("layout", layout)
+    for i, h in ipairs(current_ratios) do
+        current_ratios[i] = h / total_lines
+    end
+
+    -- Compute current width ratio for the first window
+    local width_ratio = 0.5
+    local first_win = windows[1]
+    if first_win and vim.api.nvim_win_is_valid(first_win) then
+        width_ratio = vim.api.nvim_win_get_width(first_win) / vim.o.columns
+    end
+
+    -- Load previously saved layout
+    local saved = persistence.get_config("layout") or {}
+    local epsilon = 0.10 -- 10% tolerance
+
+    local ratios_changed = false
+    if saved.height_ratios then
+        for i, r in ipairs(current_ratios) do
+            if math.abs(r - (saved.height_ratios[i] or 0)) > epsilon then
+                ratios_changed = true
+                break
+            end
+        end
+    else
+        ratios_changed = true
+    end
+
+    local width_changed = math.abs(width_ratio - (saved.width_ratio or 0)) > epsilon
+
+    -- Only save if something meaningful changed
+    if ratios_changed or width_changed then
+        persistence.set_config("layout", {
+            total_lines = total_lines,
+            height_ratios = current_ratios,
+            width_ratio = width_ratio,
+        })
+    end
+end
+
+-- Apply saved layout, scaling heights if total height changed
+local function _apply_layout()
+    local windows = get_managed_windows()
+    if #windows ~= #_window_defs then
+        return
+    end
+
+    local total_lines = 0
+    for i, win in ipairs(windows) do
+        if vim.api.nvim_win_is_valid(win) then
+            total_lines = total_lines + vim.api.nvim_win_get_height(win)
+        end
+    end
+
+    local saved = persistence.get_config("layout") or {}
+    local height_ratios = saved.height_ratios or {}
+
+    -- Compute new heights for each window
+    local heights = {}
+    local accumulated = 0
+    for i = 1, #windows - 1 do
+        local h = math.floor(total_lines * (height_ratios[i] or _window_defs[i].default_height_ratio))
+        heights[i] = h
+        accumulated = accumulated + h
+    end
+
+    -- Last window takes remaining lines
+    heights[#windows] = total_lines - accumulated
+
+    -- Apply heights
+    for i, win in ipairs(windows) do
+        if vim.api.nvim_win_is_valid(win) then
+            vim.api.nvim_win_set_height(win, heights[i])
+        end
+    end
 end
 
 -- ======================================
@@ -113,23 +195,44 @@ local function _destroy_components()
     end
 end
 
-local function _create_components()
+local function _create_components(windows)
     _destroy_components()
-
     for i, def in ipairs(_window_defs) do
-        local winid = _windows[i]
-
+        local winid = windows[i]
         local compbuf = CompBuffer:new(def.buf_type, def.label)
         _buffers[i] = compbuf
-
         vim.wo[winid].winfixbuf = false
         vim.api.nvim_win_set_buf(winid, (compbuf:get_or_create_buf()))
         vim.wo[winid].winfixbuf = true
-
         if def.comp_class then
             local comp = def.comp_class:new()
             comp:link_to_buffer(compbuf:make_controller())
             _components[i] = comp
+        end
+    end
+end
+
+local function _on_resize()
+    local windows = get_managed_windows()
+    if #windows ~= #_window_defs then
+        return
+    end
+
+    local wins = vim.v.event.windows
+    if wins and #windows > 0 then
+        local ours_only = true
+        for _, win in ipairs(wins) do
+            if not vim.tbl_contains(windows, win) then
+                ours_only = false
+                break
+            end
+        end
+        if ours_only then
+            _save_layout()
+        else
+            vim.defer_fn(function()
+                _apply_layout()
+            end, 100)
         end
     end
 end
@@ -162,7 +265,7 @@ function M.show()
     local original_win = vim.api.nvim_get_current_win()
 
     -- Create vertical container (first window)
-    vim.cmd("topleft vsplit")
+    vim.cmd("topleft 1vsplit")
     local first_win = vim.api.nvim_get_current_win()
 
     vim.api.nvim_win_set_width(
@@ -170,55 +273,60 @@ function M.show()
         math.floor(width_ratio * vim.o.columns)
     )
 
-    table.insert(_windows, first_win)
+    local windows = {}
+    table.insert(windows, first_win)
 
     -- Create remaining windows
     for i = 2, #_window_defs do
-        vim.cmd("below split")
+        vim.cmd("below 1split")
         local win = vim.api.nvim_get_current_win()
-        table.insert(_windows, win)
+        table.insert(windows, win)
     end
 
     -- Apply height ratios for first N-1 windows
-    for i = 1, (#_windows - 1) do
+    for i = 1, (#windows - 1) do
         local ratio =
             height_ratios[i]
             or _window_defs[i].default_height_ratio
 
         if ratio then
-            vim.api.nvim_set_current_win(_windows[i])
+            vim.api.nvim_set_current_win(windows[i])
             vim.api.nvim_win_set_height(
-                _windows[i],
+                windows[i],
                 math.floor(ratio * vim.o.lines)
             )
         end
     end
 
     -- Configure windows
-    for i, win in ipairs(_windows) do
-        vim.wo[win].wrap        = false
-        vim.wo[win].spell       = false
-        vim.wo[win].winfixbuf   = true
-        vim.wo[win].winfixwidth = true
-        --vim.wo[win].winfixheight = true
+    for i, win in ipairs(windows) do
+        vim.wo[win].wrap         = false
+        vim.wo[win].spell        = false
+        vim.wo[win].winfixbuf    = true
 
-        vim.w[win][KEY_MARKER]  = true
+        vim.w[win][KEY_MARKER]   = true
+        vim.w[win][INDEX_MARKER] = i
+    end
+
+    for i, def in ipairs(_window_defs) do
+        local winid = windows[i]
+        vim.api.nvim_set_option_value('winfixwidth', true, { scope = 'local', win = winid })
     end
 
     if vim.api.nvim_win_is_valid(original_win) then
         vim.api.nvim_set_current_win(original_win)
     end
 
-    _create_components()
+    _create_components(windows)
+
+    _apply_layout()
 
     -- Resize tracking
     vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
     vim.api.nvim_create_autocmd("WinResized", {
         group = _ui_auto_group,
         callback = function()
-            if #_windows > 0 then
-                _save_layout()
-            end
+            _on_resize()
         end,
     })
 end
@@ -228,15 +336,16 @@ end
 -- ======================================
 
 function M.hide()
+    local windows = get_managed_windows()
+
     vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
 
-    for _, win in ipairs(_windows) do
+    for _, win in ipairs(windows) do
         if vim.api.nvim_win_is_valid(win) then
             vim.api.nvim_win_close(win, true)
         end
     end
 
-    _windows = {}
     _destroy_components()
 end
 
