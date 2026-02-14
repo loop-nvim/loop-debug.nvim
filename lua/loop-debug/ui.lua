@@ -114,7 +114,7 @@ local function _save_layout()
 
     -- Load previously saved layout
     local saved = persistence.get_config("layout") or {}
-    local epsilon = 0.10 -- 10% tolerance
+    local epsilon = 1.2 / vim.o.lines
 
     local ratios_changed = false
     if saved.height_ratios then
@@ -232,7 +232,7 @@ local function _on_resize()
         else
             vim.defer_fn(function()
                 _apply_layout()
-            end, 100)
+            end, 0)
         end
     end
 end
