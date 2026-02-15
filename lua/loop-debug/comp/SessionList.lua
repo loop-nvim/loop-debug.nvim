@@ -12,13 +12,15 @@ local SessionListComp = class(ItemList)
 ---@return loop.comp.ItemList.Chunk[]
 local function _item_formatter(id, data)
     ---@type loopdebug.events.SessionInfo
-    local info = data.info or {}
+    local name = data.name
+    local state = data.state
+    local nb_paused_threads = data.nb_paused_threads
 
     local symbols = config.current.symbols
     assert(symbols)
 
     local chunks = {}
-    local nb_paused = info.nb_paused_threads or 0
+    local nb_paused = nb_paused_threads or 0
     local is_paused = nb_paused > 0
 
     table.insert(chunks, {
@@ -27,14 +29,14 @@ local function _item_formatter(id, data)
     })
     table.insert(chunks, { " ", nil })
     table.insert(chunks, {
-        tostring(info.name or "unknown"),
+        tostring(name or "unknown"),
         "Title",
     })
-    if info.state and info.state ~= "running" then
+    if state and state ~= "running" then
         table.insert(chunks, { " ", nil })
         table.insert(chunks, {
-            "(" .. info.state .. ")",
-            "Comment",
+            "(" .. state .. ")",
+            "DiagnosticInfo",
         })
     end
     if nb_paused > 0 then
@@ -42,7 +44,7 @@ local function _item_formatter(id, data)
         table.insert(chunks, { " ", nil })
         table.insert(chunks, {
             string.format("[%d paused thread%s]", nb_paused, s),
-            "DiagnosticWarn",
+            "DiagnosticInfo",
         })
     end
     return chunks
@@ -57,6 +59,9 @@ function SessionListComp:init()
 
     ---@type table<number,loopdebug.events.SessionInfo>
     self._sessions = {}
+
+    ---@type table<number,table>
+    self._deferred_update_timers = {}
 
     ---@type loop.TrackerRef?
     self._events_tracker_ref = debugevents.add_tracker({
@@ -73,11 +78,32 @@ function SessionListComp:init()
             self:_refresh()
         end,
         on_session_update = function(id, info)
-            self._sessions[id] = info
-            self:_refresh()
+            local timer = self._deferred_update_timers[id]
+            if timer and timer:is_active() then
+                timer:stop()
+                timer:close()
+            end
+            self._deferred_update_timers[id] = nil
+            local nb_paused = info.nb_paused_threads or 0
+            if nb_paused > 0 then
+                self._sessions[id] = info
+                self:_refresh()
+            else
+                self._deferred_update_timers[id] = vim.defer_fn(function()
+                        self._sessions[id] = info
+                        self:_refresh()
+                    end,
+                    config.current.anti_flicker_delay)
+            end
         end,
         on_session_removed = function(id)
             self._sessions[id] = nil
+            local timer = self._deferred_update_timers[id]
+            if timer and timer:is_active() then
+                timer:stop()
+                timer:close()
+            end
+            self._deferred_update_timers[id] = nil
             self:_refresh()
         end,
         on_view_udpate = function(view)
@@ -91,6 +117,13 @@ function SessionListComp:dispose()
     if self._events_tracker_ref then
         self._events_tracker_ref.cancel()
     end
+    for _, timer in pairs(self._deferred_update_timers) do
+        if timer:is_active() then
+            timer:stop()
+        end
+        timer:close()
+    end
+    self._deferred_update_timers = {}
 end
 
 ---@param page loop.PageController
@@ -105,20 +138,6 @@ function SessionListComp:link_to_buffer(buf_ctrl)
 end
 
 function SessionListComp:_refresh()
-    if next(self._sessions) == nil then
-        --@type loop.pages.ItemListPage.Item
-        local item = {
-            id = 0,
-            ---@class loopdebug.mgr.TaskPageItemData
-            data = {
-                label = "No debug sessions",
-                nb_paused_threads = 0,
-            }
-        }
-        self:set_items({ item })
-        return
-    end
-
     local session_ids = vim.tbl_keys(self._sessions)
     table.sort(session_ids)
 
@@ -132,12 +151,13 @@ function SessionListComp:_refresh()
             id = sess_id,
             ---@class loopdebug.mgr.TaskPageItemData
             data = {
-                info = info
+                name = info.name,
+                state = info.state,
+                nb_paused_threads = info.nb_paused_threads,
             }
         }
         table.insert(list_items, item)
     end
-
     self:set_items(list_items)
 end
 

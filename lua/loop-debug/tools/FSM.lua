@@ -114,16 +114,7 @@ function FSM:_call_state_handler(trigger, trigger_data)
         return
     end
 
-    local cb_error = function(err)
-        self._log:error("In FSM callback for " ..
-            (state or "?") .. "\n" ..
-            debug.traceback("Error: " .. tostring(err) .. "\n", 2))
-    end
-
-    local ok = xpcall(function() handler(trigger, trigger_data) end, cb_error)
-    if not ok then
-        self._log:error({ "Error in state handler for ", state })
-    end
+    handler(trigger, trigger_data)
 end
 
 return FSM
