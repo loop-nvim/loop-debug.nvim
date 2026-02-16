@@ -629,6 +629,10 @@ function M.debug_command(command, args, opts, wsdir)
         sess_data.controller.pause(sess_data.cur_thread_id or 0); return
     end
 
+    if command == 'terminate' then
+        sess_data.controller.terminate(); return
+    end
+
     if not sess_data.cur_thread_id then
         vim.notify("No thread selected", vim.log.levels.WARN); return
     end
