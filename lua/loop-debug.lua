@@ -19,7 +19,7 @@ local DEFAULT_CONFIG = {
         currentframe = 100,
     },
     symbols = {
-        running                  = "⚙",
+        running                  = "●",
         paused                   = "⏸",
         success                  = "✓",
         failure                  = "✗",
