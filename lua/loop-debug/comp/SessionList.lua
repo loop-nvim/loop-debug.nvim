@@ -35,7 +35,7 @@ local function _item_formatter(id, data)
     if state and state ~= "running" then
         table.insert(chunks, { " ", nil })
         table.insert(chunks, {
-            "(" .. state .. ")",
+            state,
             "DiagnosticInfo",
         })
     end
