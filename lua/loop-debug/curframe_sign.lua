@@ -1,4 +1,3 @@
----@class loop.signs
 local M           = {}
 
 local debugevents = require('loop-debug.debugevents')
@@ -8,6 +7,7 @@ local config      = require("loop-debug.config")
 local filetools   = require('loop.tools.file')
 local uitools     = require('loop.tools.uitools')
 local strtools    = require('loop.tools.strtools')
+local tslangspec  = require("loop-debug.tools.tslangspec")
 
 do
     -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'DiagnosticInfo' })
@@ -50,32 +50,18 @@ local function _cancel_deferred_remove_locals_virttext()
     end
 end
 
-local _ts_SCOPE_NODES = {
-    compound_statement = true, -- { ... }
-    for_statement = true,
-    while_statement = true,
-    if_statement = true,
-    function_definition = true,
-}
 
--- Nodes that *introduce* names (we’ll search inside them for identifiers)
-local _ts_DECL_NODES = {
-    declaration = true,
-    init_declarator = true,
-    declarator = true,
-    parameter_declaration = true,
-    reference_declarator = true
-}
-
-local function _ts_find_identifier(node)
+---@param node TSNode
+---@param langspec loopdebug.TSLangSpec
+local function _ts_find_identifier(node, langspec)
     if not node then return nil end
     local type = node:type()
     if type == "identifier" then
         return node
     end
-    if _ts_DECL_NODES[type] then
+    if langspec.decl_nodes[type] then
         for child in node:iter_children() do
-            local id = _ts_find_identifier(child)
+            local id = _ts_find_identifier(child, langspec)
             if id then return id end
         end
     end
@@ -84,8 +70,9 @@ end
 
 ---@param scope TSNode
 ---@param bufnr integer
+---@param langspec loopdebug.TSLangSpec
 ---@param results {node: TSNode, id_node: TSNode?, name: string?}[]
-local function _ts_get_indentifiers_in_scope(scope, bufnr, row, results)
+local function _ts_get_indentifiers_in_scope(scope, bufnr, row, langspec, results)
     ---@type TSNode[]
     local children = {}
     for child in scope:iter_children() do
@@ -100,7 +87,7 @@ local function _ts_get_indentifiers_in_scope(scope, bufnr, row, results)
     end
     for _, child in ipairs(reversed) do
         local t = child:type()
-        local id = _ts_find_identifier(child)
+        local id = _ts_find_identifier(child, langspec)
         if id then
             local name = vim.treesitter.get_node_text(id, bufnr)
             if name and name ~= "" then
@@ -110,8 +97,8 @@ local function _ts_get_indentifiers_in_scope(scope, bufnr, row, results)
                     name    = name,
                 })
             end
-        elseif not _ts_SCOPE_NODES[t] then
-            _ts_get_indentifiers_in_scope(child, bufnr, row, results)
+        elseif not langspec.scope_nodes[t] then
+            _ts_get_indentifiers_in_scope(child, bufnr, row, langspec, results)
         end
     end
 end
@@ -124,6 +111,8 @@ local function _place_variables_virttext(frame, data)
     local filepath = frame.source.path
     local bufnr = vim.fn.bufnr(filepath)
     if bufnr == -1 then return end
+
+    local langspec = tslangspec.get_lang_spec(vim.bo[bufnr].filetype)
 
     _vars_extmarks_group.remove_extmarks()
 
@@ -195,7 +184,7 @@ local function _place_variables_virttext(frame, data)
     ---@type TSNode?
     local n = current
     while n do
-        if _ts_SCOPE_NODES[n:type()] then
+        if langspec.scope_nodes[n:type()] then
             table.insert(scope_stack, n)
         end
         n = n:parent()
@@ -210,7 +199,7 @@ local function _place_variables_virttext(frame, data)
 
     for _, scope_node in ipairs(scope_stack) do
         local decls = {}
-        _ts_get_indentifiers_in_scope(scope_node, bufnr, cursor_row, decls)
+        _ts_get_indentifiers_in_scope(scope_node, bufnr, cursor_row, langspec, decls)
         for _, entry in ipairs(decls) do
             local name = entry.name
             if name and not seen[name] then
