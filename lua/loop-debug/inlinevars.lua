@@ -1,29 +1,18 @@
 local M           = {}
 
+local filetools   = require('loop.tools.file')
 local debugevents = require('loop-debug.debugevents')
-local loopsigns   = require('loop.signs')
 local extmarks    = require('loop.extmarks')
 local config      = require("loop-debug.config")
-local filetools   = require('loop.tools.file')
-local uitools     = require('loop.tools.uitools')
 local strtools    = require('loop.tools.strtools')
 local tslangspec  = require("loop-debug.tools.tslangspec")
 
 do
-    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'DiagnosticInfo' })
-    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'FloatBorder' })
-    -- vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'NormalFloat' })
     vim.api.nvim_set_hl(0, 'LoopDebugVarPill', { link = 'Visual' })
     local pill = vim.api.nvim_get_hl(0, { name = 'LoopDebugVarPill', link = false })
     vim.api.nvim_set_hl(0, 'LoopDebugVarPillSep', { fg = pill.bg, bg = 'NONE' })
 end
 
----@type loop.signs.Group
-local _sign_group
-
-local _sign_name           = "currentframe"
-
-local _init_done           = false
 local _query_context       = 0
 
 local _max_var_pill_size   = 30
@@ -31,9 +20,8 @@ local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80
 local _vars_extmark_id     = 0
 
 local _vars_clear_timer
-local function _remove_locals_virttext()
+local function _deferred_remove_locals_virttext()
     if not _vars_clear_timer then
-        --defer to avoid flickering
         _vars_clear_timer = vim.defer_fn(function()
                 _vars_clear_timer = nil
                 _vars_extmarks_group.remove_extmarks()
@@ -53,26 +41,32 @@ end
 
 ---@param node TSNode
 ---@param langspec loopdebug.TSLangSpec
-local function _ts_find_identifier(node, langspec)
-    if not node then return nil end
-    local type = node:type()
-    if type == "identifier" then
-        return node
-    end
-    if langspec.decl_nodes[type] then
-        for child in node:iter_children() do
-            local id = _ts_find_identifier(child, langspec)
-            if id then return id end
+---@return TSNode[] list of identifier nodes in reversed order
+local function _ts_find_identifiers(node, langspec)
+    if not node then return {} end
+    local identifiers = {}
+
+    local function collect(n)
+        local type = n:type()
+        if type == "identifier" then
+            table.insert(identifiers, 1, n) -- insert at front to reverse order
+        elseif langspec.decl_nodes[type] then
+            for child in n:iter_children() do
+                collect(child)
+            end
         end
     end
-    return nil
+
+    collect(node)
+    return identifiers
 end
 
 ---@param scope TSNode
 ---@param bufnr integer
+---@param row integer
 ---@param langspec loopdebug.TSLangSpec
 ---@param results {node: TSNode, id_node: TSNode?, name: string?}[]
-local function _ts_get_indentifiers_in_scope(scope, bufnr, row, langspec, results)
+local function _ts_get_identifiers_in_scope(scope, bufnr, row, langspec, results)
     ---@type TSNode[]
     local children = {}
     for child in scope:iter_children() do
@@ -81,14 +75,14 @@ local function _ts_get_indentifiers_in_scope(scope, bufnr, row, langspec, result
             table.insert(children, child)
         end
     end
-    local reversed = {}
+
+    -- Reverse the children array
     for i = #children, 1, -1 do
-        reversed[#reversed + 1] = children[i]
-    end
-    for _, child in ipairs(reversed) do
-        local t = child:type()
-        local id = _ts_find_identifier(child, langspec)
-        if id then
+        local child = children[i]
+
+        -- Collect all identifier nodes in reversed order
+        local ids = _ts_find_identifiers(child, langspec)
+        for _, id in ipairs(ids) do
             local name = vim.treesitter.get_node_text(id, bufnr)
             if name and name ~= "" then
                 table.insert(results, {
@@ -97,14 +91,22 @@ local function _ts_get_indentifiers_in_scope(scope, bufnr, row, langspec, result
                     name    = name,
                 })
             end
-        elseif not langspec.scope_nodes[t] then
-            _ts_get_indentifiers_in_scope(child, bufnr, row, langspec, results)
+        end
+
+        -- Recurse into non-scope nodes
+        local t = child:type()
+        if not langspec.scope_nodes[t] then
+            _ts_get_identifiers_in_scope(child, bufnr, row, langspec, results)
         end
     end
 end
 
 local function _place_variables_virttext(frame, data)
     if not (data.variables and frame.source and frame.source.path and frame.line) then
+        return
+    end
+
+    if not filetools.file_exists(frame.source.path) then
         return
     end
 
@@ -199,7 +201,7 @@ local function _place_variables_virttext(frame, data)
 
     for _, scope_node in ipairs(scope_stack) do
         local decls = {}
-        _ts_get_indentifiers_in_scope(scope_node, bufnr, cursor_row, langspec, decls)
+        _ts_get_identifiers_in_scope(scope_node, bufnr, cursor_row, langspec, decls)
         for _, entry in ipairs(decls) do
             local name = entry.name
             if name and not seen[name] then
@@ -239,45 +241,19 @@ local function _place_locals_virttext(view)
     end)
 end
 
-function M.init()
-    if _init_done then return end
-    _init_done = true
-
-    local highlight = "LoopDebugCurrentFrame"
-    vim.api.nvim_set_hl(0, highlight, { link = "Todo" })
-
-    _sign_group = loopsigns.define_group("CurrentFrame", { priority = config.current.sign_priority.currentframe })
-    _sign_group.define_sign(_sign_name, config.current.symbols.debug_frame or ">", highlight)
-
-    debugevents.add_tracker({
-        on_debug_start = function()
-
-        end,
-        on_debug_end = function()
-
-        end,
-        on_view_udpate = function(view)
-            local frame = view.frame
-            if not (frame and frame.source and frame.source.path) then
-                _sign_group.remove_signs()
-                if config.current.enable_inlay_variables then
-                    _remove_locals_virttext()
-                end
-                return
-            end
-            if view.trigger ~= "variable" then
-                if not filetools.file_exists(frame.source.path) then return end
-                -- Open file and move cursor
-                local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
-                -- Place sign for current frame
-                _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
-            end
-            if config.current.enable_inlay_variables then
-                _cancel_deferred_remove_locals_virttext()
-                _place_locals_virttext(view)
-            end
+function M.on_view_udpate(view)
+    local frame = view.frame
+    if not (frame and frame.source and frame.source.path) then
+        if config.current.enable_inlay_variables then
+            --defer to avoid flickering
+            _deferred_remove_locals_virttext()
         end
-    })
+        return
+    end
+    if config.current.enable_inlay_variables then
+        _cancel_deferred_remove_locals_virttext()
+        _place_locals_virttext(view)
+    end
 end
 
 return M
