@@ -6,7 +6,16 @@ local persistence  = require('loop-debug.persistence')
 local daptools     = require('loop-debug.dap.daptools')
 local debugevents  = require('loop-debug.debugevents')
 
----@alias loopdebug.comp.Variables.Item loop.comp.ItemTree.Item
+---@class loopdebug.comp.Variables.ItemData
+---@field path string
+---@field name string
+---@field value string
+---@field presentationHint loopdebug.proto.VariablePresentationHint
+---@field is_na boolean?
+---@field greyout boolean?
+---@field scopelabel string?
+
+---@alias loopdebug.comp.Variables.ItemDef loop.comp.ItemTree.ItemDef
 
 ---@class loopdebug.comp.Vars.DataSource
 ---@field sess_id number
@@ -101,7 +110,7 @@ local _var_kind_to_hl_group = {
 }
 
 ---@param id any
----@param data any
+---@param data loopdebug.comp.Variables.ItemData
 ---@return string[][], string[][]
 local function _variable_node_formatter(id, data)
     if not data then
@@ -232,7 +241,7 @@ end
 ---@param ref number
 ---@param parent_id any
 ---@param parent_path string
----@param callback fun(items:loopdebug.comp.Variables.Item[])
+---@param callback fun(items:loopdebug.comp.Variables.ItemDef[])
 function Variables:_load_variables(context, data_providers, ref, parent_id, parent_path, callback)
     data_providers.variables_provider({ variablesReference = ref }, function(_, vars_data)
         if self._query_context ~= context then return end
@@ -242,11 +251,12 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, pare
                 local item_id = _get_semantic_id(parent_id, var.name, idx)
                 local path = parent_path .. '/' .. var.name
 
-                ---@type loopdebug.comp.Variables.Item
+                ---@type loopdebug.comp.Variables.ItemDef
                 local var_item = {
                     id = item_id,
                     parent_id = parent_id,
                     expanded = self._layout_cache[path],
+                    ---@type loopdebug.comp.Variables.ItemData
                     data = {
                         path = path,
                         name = var.name,
@@ -291,7 +301,7 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_so
                 or scope.name == "Global" or scope.name == "Globals")
         end
 
-        ---@type loop.comp.ItemTree.Item
+        ---@type loop.comp.ItemTree.ItemDef
         local scope_item = {
             id = item_id,
             parent_id = parent_id,
@@ -328,20 +338,20 @@ end
 ---@param expr string
 ---@param item_id any
 function Variables:_load_expr_value(context, parent_id, expr, item_id)
-
     local path = parent_id .. "/" .. expr
 
     -- Check if we already have this item to preserve existing data during greyout
     local existing = self:get_item(item_id)
 
-    ---@type loopdebug.comp.Variables.Item
+    ---@type loopdebug.comp.Variables.ItemDef
     local var_item = {
         id = item_id,
         expanded = self._layout_cache[path],
-        data = existing and existing.data or { path = path, is_expr = true, name = expr, is_na = true, value = "not available" }
+        data = existing and existing.data or
+            { path = path, is_expr = true, name = expr, is_na = true, value = "not available" }
     }
 
-   -- Ensure the name is correct if it was renamed
+    -- Ensure the name is correct if it was renamed
     var_item.data.name = expr
 
     self:upsert_item(parent_id, var_item)
@@ -382,7 +392,7 @@ function Variables:_load_session_vars(context)
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
 
-    ---@type loop.comp.ItemTree.Item
+    ---@type loop.comp.ItemTree.ItemDef
     local root_item = {
         id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Variables" }
     }
@@ -407,7 +417,7 @@ end
 function Variables:link_to_buffer(comp)
     ItemTreeComp.link_to_buffer(self, comp)
 
-    ---@param item loopdebug.comp.Variables.Item|nil
+    ---@param item loop.comp.ItemTree.Item|nil
     local function add_or_edit_watch(item)
         floatwin.input_at_cursor({
                 default_text = item and item.data.name or "" },
@@ -428,12 +438,32 @@ function Variables:link_to_buffer(comp)
         )
     end
 
+    ---@param item loop.comp.ItemTree.Item
+    local function edit_variable(item)
+        vim.notify("Not implemented")
+        if false then
+            ---@type loopdebug.comp.Variables.ItemData
+            local data = item.data
+            floatwin.input_at_cursor({ default_text = item and data.name or "" },
+                function(value)
+                    if not value then return end
+                end
+            )
+        end
+    end
+
     comp.add_keymap("i", { desc = "Add Expression", callback = function() add_or_edit_watch() end })
     comp.add_keymap("c", {
-        desc = "Edit Expression",
+        desc = "Edit Expression/Variable",
         callback = function()
             local cur = self:get_cur_item()
-            if cur and cur.data.is_expr then add_or_edit_watch(cur) end
+            if cur then
+                if cur.data.is_expr then
+                    add_or_edit_watch(cur)
+                else
+                    edit_variable(cur)
+                end
+            end
         end
     })
     comp.add_keymap("d", {

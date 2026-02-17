@@ -116,6 +116,20 @@ function Session:_create_data_providers()
             end
         end)
     end
+    ---@type loopdebug.session.SetVariableProvider
+    local set_variable_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_setVariable(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            else
+                callback(err, body)
+            end
+        end)
+    end    
     ---@type loopdebug.session.CompletionProvider
     local completion_provider = function(req, callback)
         if not is_available() then
@@ -140,6 +154,7 @@ function Session:_create_data_providers()
         scopes_provider = scopes_provider,
         variables_provider = variables_provider,
         evaluate_provider = evaluate_provider,
+        set_variable_provider = set_variable_provider,
         completion_provider = completion_provider,
     }
 end
