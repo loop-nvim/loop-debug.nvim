@@ -86,7 +86,9 @@ function StackTrace:init()
             self:set_items({})
         end,
         on_view_udpate = function(view)
-            self:_update_data(view)
+            if view.trigger ~= "variable" then
+                self:_update_data(view)
+            end
         end
     })
 end

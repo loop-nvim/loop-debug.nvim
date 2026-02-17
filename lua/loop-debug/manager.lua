@@ -126,17 +126,21 @@ end
 -- =============================================================================
 
 ---Reports the full view state to the UI (debugevents).
-local function _report_current_view()
+---@param trigger loopdebug.events.ViewUpdateTrigger
+local function _report_current_view(trigger)
     local mgr_data = _manager_data
     local sess_id = mgr_data.current_session_id
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
 
     if not sess_data then
-        debugevents.report_view_update({})
+        debugevents.report_view_update({
+            trigger = trigger
+        })
         return
     end
 
     debugevents.report_view_update({
+        trigger = trigger,
         session_id = sess_id,
         session_name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
@@ -199,7 +203,7 @@ end
 ---@param send_updates boolean If true, triggers a UI refresh
 local function _switch_to_frame(frame, send_updates)
     _set_frame_silent(frame)
-    if send_updates then _report_current_view() end
+    if send_updates then _report_current_view("frame") end
 end
 
 ---Switches the active thread, optionally fetches the stack, and updates UI.
@@ -214,7 +218,7 @@ local function _switch_to_thread(sess_id, thread_id, send_updates)
     local sess_data = mgr_data.session_data[sess_id]
 
     -- 2. Report initial view (thread changed, frame empty)
-    if send_updates then _report_current_view() end
+    if send_updates then _report_current_view("thread") end
 
     if not thread_id or not sess_data then return end
 
@@ -226,7 +230,7 @@ local function _switch_to_thread(sess_id, thread_id, send_updates)
             local topframe = data and data.stackFrames and data.stackFrames[1]
             if topframe then
                 _set_frame_silent(topframe)
-                _report_current_view()
+                _report_current_view("thread")
             end
         end
     end)
@@ -242,7 +246,7 @@ local function _switch_to_session(sess_id, thread_pause_evt)
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
     if not sess_id or not sess_data then
         mgr_data.current_session_id = nil
-        _report_current_view()
+        _report_current_view("session")
         return
     end
 
@@ -396,6 +400,14 @@ function M.on_session_thread_continue(sess_id, sess_name, event_data)
         end
     end
     _report_session_update(sess_id)
+end
+
+---@param sess_id number
+---@param sess_name string
+function M.on_session_variable_change(sess_id, sess_name)
+    if _manager_data.current_session_id ~= sess_id then return end
+    -- force the trackers to refresh
+    _report_current_view("variable")
 end
 
 ---@param sess_id number

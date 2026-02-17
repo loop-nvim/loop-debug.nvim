@@ -33,6 +33,7 @@ local Session          = require('loop-debug.dap.Session')
 ---@field on_thread_pause fun(sess_id:number, sess_name:string,data:loopdebug.session.notify.ThreadsEventScope)|nil
 ---@field on_thread_continue fun(sess_id:number, sess_name:string,data:loopdebug.session.notify.ThreadsEventScope)|nil
 ---@field on_breakpoint_event fun(sess_id:number, sess_name:string, event:loopdebug.session.notify.BreakpointsEvent)|nil
+---@field on_variable_change fun(sess_id:number, sess_name:string)|nil
 
 ---@class loopdebug.DebugJob.SessionData
 ---@field session loopdebug.Session
@@ -233,6 +234,10 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
     end
     if event == "threads_continued" then
         self._tracker.on_thread_continue(sess_id, session:name(), event_data)
+        return
+    end
+    if event == "variable_change" then
+        self._tracker.on_variable_change(sess_id, session:name())
         return
     end
     if event == "breakpoints" then

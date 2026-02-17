@@ -595,10 +595,18 @@ error('Cannot require a meta file')
 ---@field memoryReference string|nil
 
 ---@class loopdebug.proto.SetExpressionResponse
----@field value loopdebug.proto.Variable
+---@field value string
+---@field type? string
+---@field variablesReference? integer
+---@field namedVariables? integer
+---@field indexedVariables? integer
 
 ---@class loopdebug.proto.SetVariableResponse
----@field value loopdebug.proto.Variable
+---@field value string
+---@field type? string
+---@field variablesReference? integer
+---@field namedVariables? integer
+---@field indexedVariables? integer
 
 ---@class loopdebug.proto.GotoTargetsResponse
 ---@field targets loopdebug.proto.GotoTarget[]

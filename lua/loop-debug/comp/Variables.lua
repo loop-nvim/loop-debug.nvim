@@ -11,6 +11,9 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field name string
 ---@field value string
 ---@field presentationHint loopdebug.proto.VariablePresentationHint
+---@field variablesReference number?
+---@field evaluateName string?
+---@field is_expr boolean?
 ---@field is_na boolean?
 ---@field greyout boolean?
 ---@field scopelabel string?
@@ -261,7 +264,9 @@ function Variables:_load_variables(context, data_providers, ref, parent_id, pare
                         path = path,
                         name = var.name,
                         value = var.value,
-                        presentationHint = var.presentationHint
+                        presentationHint = var.presentationHint,
+                        variablesReference = var.variablesReference,
+                        evaluateName = var.evaluateName
                     },
                 }
 
@@ -306,7 +311,11 @@ function Variables:_load_scopes(context, parent_id, parent_path, scopes, data_so
             id = item_id,
             parent_id = parent_id,
             expanded = expanded,
-            data = { path = path, scopelabel = (scope.expensive and "⏱ " or "") .. scope.name }
+            data = {
+                path = path,
+                scopelabel = (scope.expensive and "⏱ " or "") .. scope.name,
+                variablesReference = scope.variablesReference,
+            }
         }
         scope_item.children_callback = function(cb)
             self:_load_variables(context, data_source.data_providers, scope.variablesReference, item_id, path, cb)
@@ -440,16 +449,56 @@ function Variables:link_to_buffer(comp)
 
     ---@param item loop.comp.ItemTree.Item
     local function edit_variable(item)
-        vim.notify("Not implemented")
-        if false then
-            ---@type loopdebug.comp.Variables.ItemData
-            local data = item.data
-            floatwin.input_at_cursor({ default_text = item and data.name or "" },
-                function(value)
-                    if not value then return end
-                end
-            )
+        local data_source = self._current_data_source
+        if not data_source then return end
+        local providers = data_source.data_providers
+        if not providers then return end
+        local parent_item = self:get_parent_item(item.id)
+        if not parent_item then return end
+        ---@type loopdebug.comp.Variables.ItemData
+        local parent_data = parent_item.data
+        ---@type loopdebug.comp.Variables.ItemData
+        local data = item.data
+        if data.is_expr then return end
+        if data.variablesReference and data.variablesReference > 0 then
+            -- dap cannot set aggregate variables
+            return
         end
+        local supports_set_expr = providers.supports_set_expression()
+        local supports_set_var = providers.supports_set_variable()
+        if not supports_set_var and not (supports_set_expr and data.evaluateName) then
+            vim.notify("Debug adapter does not support changing variables value")
+            return
+        end
+        local context = self._query_context
+        floatwin.input_at_cursor({ default_text = data.value },
+            function(value)
+                if not value or not self._current_data_source then return end
+                if context ~= self._query_context then return end
+                local frame_id = data_source.frame and data_source.frame.id
+                if (supports_set_expr and data.evaluateName) then
+                    providers.set_expression_provider({
+                        expression = data.evaluateName,
+                        value = value,
+                        frameId = frame_id
+                    }, function(err, rep)
+                        if err then
+                            vim.notify("Failed to set variable, " .. tostring(err))
+                        end
+                    end)
+                else
+                    providers.set_variable_provider({
+                        name = data.name,
+                        variablesReference = parent_data.variablesReference,
+                        value = value
+                    }, function(err, rep)
+                        if err then
+                            vim.notify("Failed to set variable, " .. tostring(err))
+                        end
+                    end)
+                end
+            end
+        )
     end
 
     comp.add_keymap("i", { desc = "Add Expression", callback = function() add_or_edit_watch() end })

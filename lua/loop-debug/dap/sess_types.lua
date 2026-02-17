@@ -46,6 +46,7 @@ error('Cannot require a meta file')
 ---|"breakpoints"
 ---|"debuggee_exit"
 ---|"subsession_request"
+---|"variable_change"
 ---@alias loop.session.Tracker fun(session:loopdebug.Session, event:loop.session.TrackerEvent, args:any)
 
 ---@class loopdebug.session.DebugArgs
@@ -75,15 +76,19 @@ error('Cannot require a meta file')
 ---@alias loopdebug.session.VariablesProvider fun(args:loopdebug.proto.VariablesArguments, callback:fun(err:string|nil, data: loopdebug.proto.VariablesResponse | nil))
 ---@alias loopdebug.session.EvaluateProvider fun(args:loopdebug.proto.EvaluateArguments, callback:fun(err:string|nil, data: loopdebug.proto.EvaluateResponse | nil))
 ---@alias loopdebug.session.SetVariableProvider fun(args:loopdebug.proto.SetVariableArguments, callback:fun(err:string|nil, data: loopdebug.proto.SetVariableResponse | nil))
+---@alias loopdebug.session.SetExpressionProvider fun(args:loopdebug.proto.SetExpressionArguments, callback:fun(err:string|nil, data: loopdebug.proto.SetExpressionResponse | nil))
 ---@alias loopdebug.session.CompletionProvider fun(args:loopdebug.proto.CompletionsArguments, callback:fun(err:string|nil, data: loopdebug.proto.CompletionsResponse | nil))
 
 ---@class loopdebug.session.DataProviders
+---@field supports_set_variable fun():boolean
+---@field supports_set_expression fun():boolean
 ---@field threads_provider loopdebug.session.ThreadsProvider
 ---@field stack_provider loopdebug.session.StackProvider
 ---@field scopes_provider loopdebug.session.ScopesProvider
 ---@field variables_provider loopdebug.session.VariablesProvider
 ---@field evaluate_provider loopdebug.session.EvaluateProvider
 ---@field set_variable_provider loopdebug.session.SetVariableProvider
+---@field set_expression_provider loopdebug.session.SetExpressionProvider
 ---@field completion_provider loopdebug.session.CompletionProvider
 
 ---@class loopdebug.session.notify.ThreadsEventScope

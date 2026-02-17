@@ -46,6 +46,16 @@ function Session:_create_data_providers()
 
     local na_msg = "not available"
 
+    ---@return boolean
+    local function supports_set_variable()
+        return self._capabilities["supportsSetVariable"] == true
+    end
+
+    ---@return boolean
+    local function supports_set_expression()
+        return self._capabilities["supportsSetExpression"] == true
+    end
+
     ---@type loopdebug.session.ThreadsProvider
     local threads_provider = function(callback)
         if not is_available() then
@@ -125,11 +135,35 @@ function Session:_create_data_providers()
         self._base_session:request_setVariable(req, function(err, body)
             if not is_available() then
                 callback(na_msg, nil)
+            elseif not supports_set_variable() then
+                callback("not supported", nil)
             else
                 callback(err, body)
+                if not err and body then
+                    self:_notify_tracker("variable_change")
+                end
             end
         end)
-    end    
+    end
+    ---@type loopdebug.session.SetExpressionProvider
+    local set_expression_provider = function(req, callback)
+        if not is_available() then
+            callback(na_msg, nil)
+            return
+        end
+        self._base_session:request_setExpression(req, function(err, body)
+            if not is_available() then
+                callback(na_msg, nil)
+            elseif not supports_set_expression() then
+                callback("not supported", nil)
+            else
+                callback(err, body)
+                if not err and body then
+                    self:_notify_tracker("variable_change")
+                end
+            end
+        end)
+    end
     ---@type loopdebug.session.CompletionProvider
     local completion_provider = function(req, callback)
         if not is_available() then
@@ -149,12 +183,15 @@ function Session:_create_data_providers()
 
     ---@type loopdebug.session.DataProviders
     return {
+        supports_set_variable = supports_set_variable,
+        supports_set_expression = supports_set_expression,
         threads_provider = threads_provider,
         stack_provider = stack_provider,
         scopes_provider = scopes_provider,
         variables_provider = variables_provider,
         evaluate_provider = evaluate_provider,
         set_variable_provider = set_variable_provider,
+        set_expression_provider = set_expression_provider,
         completion_provider = completion_provider,
     }
 end

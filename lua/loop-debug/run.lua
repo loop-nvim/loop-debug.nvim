@@ -34,6 +34,9 @@ local function _create_job_tracker(task_name, on_exit)
         on_breakpoint_event = function(sess_id, sess_name, event)
             manager.on_breakpoint_event(sess_id, event)
         end,
+        on_variable_change = function (sess_id, sess_name)
+            manager.on_session_variable_change(sess_id, sess_name)
+        end,
         on_startup_error = function()
             on_exit(-1)
         end,

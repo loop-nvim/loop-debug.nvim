@@ -276,11 +276,13 @@ function M.init()
                 end
                 return
             end
-            if not filetools.file_exists(frame.source.path) then return end
-            -- Open file and move cursor
-            local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
-            -- Place sign for current frame
-            _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
+            if view.trigger ~= "variable" then
+                if not filetools.file_exists(frame.source.path) then return end
+                -- Open file and move cursor
+                local _, bufnr = uitools.smart_open_file(frame.source.path, frame.line, frame.column)
+                -- Place sign for current frame
+                _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
+            end
             if config.current.enable_inlay_variables then
                 _cancel_deferred_remove_locals_virttext()
                 _place_locals_virttext(view)

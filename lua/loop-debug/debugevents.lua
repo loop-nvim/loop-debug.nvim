@@ -8,7 +8,10 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field state string
 ---@field nb_paused_threads number
 
+---@alias loopdebug.events.ViewUpdateTrigger "session"|"thread"|"frame"|"variable"
+
 ---@class loopdebug.events.CurrentViewUpdate
+---@field trigger loopdebug.events.ViewUpdateTrigger
 ---@field session_id number?
 ---@field session_name string?
 ---@field data_providers loopdebug.session.DataProviders?

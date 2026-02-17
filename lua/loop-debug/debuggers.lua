@@ -333,12 +333,33 @@ debuggers["js-debug"] = {
 -- Python (debugpy)
 -- ==================================================================
 debuggers.debugpy = {
-    adapter_config = {
-        adapter_id = "debugpy",
-        name = "debugpy",
-        type = "executable",
-        command = { mason_bin("python3"), "-m", "debugpy.adapter" },
-    },
+
+    adapter_config = function()
+        local function python_bin()
+            local mason_path = vim.fn.stdpath("data") .. "/mason/packages/debugpy/venv/bin/python"
+            if vim.fn.has("win32") == 1 then
+                mason_path = vim.fn.stdpath("data") .. "/mason/packages/debugpy/venv/Scripts/python.exe"
+            end
+            ---@diagnostic disable-next-line: undefined-field
+            if vim.uv.fs_stat(mason_path) then
+                return mason_path
+            end
+            -- fallback to system python3
+            local sys_py = vim.fn.exepath("python3")
+            if sys_py ~= "" then
+                return sys_py
+            end
+            -- final fallback
+            return "python"
+        end
+
+        return {
+            adapter_id = "debugpy",
+            name = "debugpy",
+            type = "executable",
+            command = { python_bin(), "-m", "debugpy.adapter" },
+        }
+    end,
     launch_args = function(context)
         local task = context.task
         return {
