@@ -11,6 +11,7 @@ local Trackers  = require("loop.tools.Trackers")
 ---@alias loopdebug.events.ViewUpdateTrigger "session"|"thread"|"frame"|"variable"
 
 ---@class loopdebug.events.CurrentViewUpdate
+---@field sequence number
 ---@field trigger loopdebug.events.ViewUpdateTrigger
 ---@field session_id number?
 ---@field session_name string?

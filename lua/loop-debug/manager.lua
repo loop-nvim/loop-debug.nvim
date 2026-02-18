@@ -38,12 +38,14 @@ local M                  = {}
 
 ---@class loopdebug.mgr.ManagerData
 ---@field session_ctx number
+---@field view_update_seq number
 ---@field current_session_id number|nil
 ---@field session_data table<number, loopdebug.mgr.SessionData>
 
 ---@type loopdebug.mgr.ManagerData
 local _manager_data      = {
     session_ctx = 1,
+    view_update_seq = 0,
     session_data = {}
 }
 
@@ -132,14 +134,19 @@ local function _report_current_view(trigger)
     local sess_id = mgr_data.current_session_id
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
 
+    mgr_data.view_update_seq = mgr_data.view_update_seq + 1
+    local seq = mgr_data.view_update_seq
+
     if not sess_data then
         debugevents.report_view_update({
-            trigger = trigger
+            sequence = seq,
+            trigger = trigger,
         })
         return
     end
 
     debugevents.report_view_update({
+        sequence = seq,
         trigger = trigger,
         session_id = sess_id,
         session_name = sess_data.sess_name,

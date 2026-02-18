@@ -13,8 +13,7 @@ do
     vim.api.nvim_set_hl(0, 'LoopDebugVarPillSep', { fg = pill.bg, bg = 'NONE' })
 end
 
-local _query_context       = 0
-
+local _current_sequence    = 0
 local _max_var_pill_size   = 30
 local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
 local _vars_extmark_id     = 0
@@ -221,16 +220,16 @@ local function _place_locals_virttext(view)
     if not (frame and frame.source and frame.source.path) then
         return
     end
-    _query_context = _query_context + 1
-    local context = _query_context
+    local sequence = view.sequence
+    _current_sequence = view.sequence
     view.data_providers.scopes_provider({ frameId = frame.id }, function(_, scopes_data)
-        if context ~= _query_context then return end
+        if sequence ~= _current_sequence then return end
         if scopes_data and scopes_data.scopes then
             for _, scope in pairs(scopes_data.scopes) do
                 if scope.presentationHint == "locals" or scope.name == "Local" then
                     view.data_providers.variables_provider({ variablesReference = scope.variablesReference },
                         function(err, data)
-                            if context ~= _query_context then return end
+                            if sequence ~= _current_sequence then return end
                             if data then
                                 _place_variables_virttext(frame, data)
                             end

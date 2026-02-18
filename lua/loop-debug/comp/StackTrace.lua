@@ -59,7 +59,7 @@ function StackTrace:init()
     })
 
     ---@type number
-    self._query_context = 0
+    self._current_seqnum = 0
 
     self._frametrackers = Trackers:new()
     self:add_tracker({
@@ -128,8 +128,8 @@ function StackTrace:_update_data(view)
         self:refresh_content()
         return
     end
-    self._query_context = self._query_context + 1
-    local context = self._query_context
+    local sequence = view.sequence
+    self._current_seqnum = sequence
     view.data_providers.stack_provider({
             threadId = view.thread_id,
             levels = config.current.stack_levels_limit or 100,
@@ -137,7 +137,7 @@ function StackTrace:_update_data(view)
         function(err, resp)
             if not resp then return end
             local cur_item_id = nil
-            if context ~= self._query_context then return end
+            if sequence ~= self._current_seqnum then return end
             local text = "Thread: " .. (view.thread_name or tostring(view.thread_id))
             local items = { {
                 id = 0,
