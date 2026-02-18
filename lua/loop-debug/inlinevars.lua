@@ -2,7 +2,6 @@ local M           = {}
 
 local filetools   = require('loop.tools.file')
 local debugevents = require('loop-debug.debugevents')
-local extmarks    = require('loop.extmarks')
 local config      = require("loop-debug.config")
 local strtools    = require('loop.tools.strtools')
 local tslangspec  = require("loop-debug.tools.tslangspec")
@@ -13,17 +12,58 @@ do
     vim.api.nvim_set_hl(0, 'LoopDebugVarPillSep', { fg = pill.bg, bg = 'NONE' })
 end
 
-local _current_sequence    = 0
-local _max_var_pill_size   = 30
-local _vars_extmarks_group = extmarks.define_group("debug_vars", { priority = 80 })
-local _vars_extmark_id     = 0
+local _vars_ns           = vim.api.nvim_create_namespace("LoopDebug-InlineVars")
+
+local _current_sequence  = 0
+local _max_var_pill_size = 30
+local _vars_extmark_id   = 0
+local _init_done         = false
+
+---@type loopdebug.events.CurrentViewUpdate
+local _current_view      = nil
 
 local _vars_clear_timer
+
+local function _remove_extmarks()
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(bufnr) then
+            vim.api.nvim_buf_clear_namespace(bufnr, _vars_ns, 0, -1)
+        end
+    end
+    _vars_extmark_id = 0
+end
+
+---@param id integer
+---@param filepath string
+---@param line integer   -- 1-based
+---@param col integer    -- 1-based
+---@param opts table
+local function _place_file_extmark(id, filepath, line, col, opts)
+    local bufnr = vim.fn.bufnr(filepath)
+    if bufnr == -1 then return end
+    if not vim.api.nvim_buf_is_loaded(bufnr) then return end
+
+    -- Convert to 0-based indexing for extmarks
+    local row = math.max(0, (line or 1) - 1)
+    local column = math.max(0, (col or 1) - 1)
+
+    vim.api.nvim_buf_set_extmark(
+        bufnr,
+        _vars_ns,
+        row,
+        column,
+        vim.tbl_extend("force", {
+            id = id,
+        }, opts or {})
+    )
+end
+
+
 local function _deferred_remove_locals_virttext()
     if not _vars_clear_timer then
         _vars_clear_timer = vim.defer_fn(function()
                 _vars_clear_timer = nil
-                _vars_extmarks_group.remove_extmarks()
+                _remove_extmarks()
             end,
             config.current.anti_flicker_delay)
     end
@@ -157,7 +197,7 @@ local function _place_variables_virttext(frame, variables)
         local sr, _, _, _ = id_node:range() -- 0-based
 
         _vars_extmark_id = _vars_extmark_id + 1
-        _vars_extmarks_group.place_file_extmark(_vars_extmark_id, filepath, sr + 1, 1, {
+        _place_file_extmark(_vars_extmark_id, filepath, sr + 1, 1, {
             virt_text     = {
                 { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
                 { text, "LoopDebugVarPill" },
@@ -246,7 +286,7 @@ local function _place_locals_virttext(view)
                         end
                         if nb_replies == #managed_scopes then
                             _cancel_deferred_remove_locals_virttext()
-                            _vars_extmarks_group.remove_extmarks()
+                            _remove_extmarks()
                             _place_variables_virttext(frame, variables)
                         end
                     end)
@@ -255,18 +295,54 @@ local function _place_locals_virttext(view)
     end)
 end
 
-function M.on_view_udpate(view)
-    local frame = view.frame
-    if not (frame and frame.source and frame.source.path) then
-        if config.current.enable_inlay_variables then
-            --defer to avoid flickering
-            _deferred_remove_locals_virttext()
-        end
+function M.init()
+    if _init_done then return end
+    _init_done = true
+
+    if not config.current.enable_inlay_variables then
         return
     end
-    if config.current.enable_inlay_variables then
-        _place_locals_virttext(view)
-    end
+
+    local augroup = vim.api.nvim_create_augroup("LoopDebug-InlineVars", { clear = true })
+
+    debugevents.add_tracker({
+        on_debug_start = function()
+        end,
+        on_debug_end = function()
+        end,
+        on_view_udpate = function(view)
+            _current_view = view
+            local frame = view.frame
+            if not (frame and frame.source and frame.source.path) then
+                --defer to avoid flickering
+                _deferred_remove_locals_virttext()
+            else
+                --vim.notify("planing inline vars (view update)")
+                _place_locals_virttext(view)
+            end
+        end
+    })
+
+    vim.api.nvim_create_autocmd({ "BufReadPost" }, {
+        group = augroup,
+        callback = function(ev)
+            local bufname = vim.api.nvim_buf_get_name(ev.buf)
+            if bufname then
+                local bufpath = vim.fn.fnamemodify(bufname, ":p") -- normalize
+                if _current_view and _current_view.frame then
+                    local view = _current_view
+                    local frame = _current_view.frame
+                    if frame and frame.source and frame.source.path then
+                        local source_path = vim.fn.fnamemodify(frame.source.path, ":p") -- normalize
+                        if bufpath == source_path then
+                            --vim.notify("planing inline vars (bufenter)")
+                            _place_locals_virttext(view)
+                        end
+                    end
+                end
+            end
+        end,
+    })
 end
 
 return M

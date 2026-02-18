@@ -80,6 +80,7 @@ function M.init()
     require('loop-debug.breakpoints').init()
     require('loop-debug.breakpointsmonitor').init()
     require('loop-debug.curframe').init()
+    require('loop-debug.inlinevars').init()
     require('loop-debug.ui').init()
 end
 

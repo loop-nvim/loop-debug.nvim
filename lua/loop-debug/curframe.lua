@@ -3,7 +3,6 @@ local M           = {}
 local debugevents = require('loop-debug.debugevents')
 local loopsigns   = require('loop.signs')
 local config      = require("loop-debug.config")
-local inlinevars  = require("loop-debug.inlinevars")
 local filetools   = require('loop.tools.file')
 local uitools     = require('loop.tools.uitools')
 
@@ -34,7 +33,6 @@ function M.init()
             local frame = view.frame
             if not (frame and frame.source and frame.source.path) then
                 _sign_group.remove_signs()
-                inlinevars.on_view_udpate(view)
                 return
             end
             if view.trigger ~= "variable" then
@@ -43,8 +41,6 @@ function M.init()
                 uitools.smart_open_file(frame.source.path, frame.line, frame.column)
                 -- Place sign for current frame
                 _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
-                -- request inline vars AFTER file is open
-                inlinevars.on_view_udpate(view)
             end
         end
     })
