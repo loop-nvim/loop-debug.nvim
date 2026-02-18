@@ -460,10 +460,6 @@ function Variables:link_to_buffer(comp)
         ---@type loopdebug.comp.Variables.ItemData
         local data = item.data
         if data.is_expr then return end
-        if data.variablesReference and data.variablesReference > 0 then
-            -- dap cannot set aggregate variables
-            return
-        end
         local supports_set_expr = providers.supports_set_expression()
         local supports_set_var = providers.supports_set_variable()
         if not supports_set_var and not (supports_set_expr and data.evaluateName) then
@@ -482,8 +478,8 @@ function Variables:link_to_buffer(comp)
                         value = value,
                         frameId = frame_id
                     }, function(err, rep)
-                        if err then
-                            vim.notify("Failed to set variable, " .. tostring(err))
+                        if err and type(err) == "string" and #err > 0 then
+                            vim.notify(err)
                         end
                     end)
                 else
@@ -492,8 +488,8 @@ function Variables:link_to_buffer(comp)
                         variablesReference = parent_data.variablesReference,
                         value = value
                     }, function(err, rep)
-                        if err then
-                            vim.notify("Failed to set variable, " .. tostring(err))
+                        if err and type(err) == "string" and #err > 0 then
+                            vim.notify(err)
                         end
                     end)
                 end
