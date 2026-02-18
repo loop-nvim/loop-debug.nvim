@@ -39,19 +39,26 @@ end
 
 
 ---@param node TSNode
+---@param row integer
 ---@param langspec loopdebug.TSLangSpec
 ---@return TSNode[] list of identifier nodes in reversed order
-local function _ts_find_identifiers(node, langspec)
+local function _ts_find_scope_identifiers(node, row, langspec)
     if not node then return {} end
     local identifiers = {}
 
     local function collect(n)
-        local type = n:type()
-        if type == "identifier" then
-            table.insert(identifiers, 1, n) -- insert at front to reverse order
-        elseif langspec.decl_nodes[type] then
-            for child in n:iter_children() do
-                collect(child)
+        local r = select(1, n:start())
+        if r <= row then
+            local type = n:type()
+            if langspec.scope_nodes[type] then
+                return
+            end
+            if type == "identifier" then
+                table.insert(identifiers, n)
+            else
+                for child in n:iter_children() do
+                    collect(child)
+                end
             end
         end
     end
@@ -64,58 +71,49 @@ end
 ---@param bufnr integer
 ---@param row integer
 ---@param langspec loopdebug.TSLangSpec
----@param results {node: TSNode, id_node: TSNode?, name: string?}[]
+---@param results {node: TSNode?, name: string?,row :number}[]
 local function _ts_get_identifiers_in_scope(scope, bufnr, row, langspec, results)
     ---@type TSNode[]
-    local children = {}
     for child in scope:iter_children() do
         local r = select(1, child:start())
         if r <= row then
-            table.insert(children, child)
-        end
-    end
-
-    -- Reverse the children array
-    for i = #children, 1, -1 do
-        local child = children[i]
-
-        -- Collect all identifier nodes in reversed order
-        local ids = _ts_find_identifiers(child, langspec)
-        for _, id in ipairs(ids) do
-            local name = vim.treesitter.get_node_text(id, bufnr)
-            if name and name ~= "" then
-                table.insert(results, {
-                    node    = child,
-                    id_node = id,
-                    name    = name,
-                })
+            local found = {}
+            -- Collect all identifier nodes in reversed order
+            local ids = _ts_find_scope_identifiers(child, row, langspec)
+            for _, id in ipairs(ids) do
+                local name = vim.treesitter.get_node_text(id, bufnr)
+                if name and name ~= "" then
+                    if not found[name] then
+                        found[name] = true
+                        table.insert(results, {
+                            node = id,
+                            name = name,
+                            row = id:start()
+                        })
+                    end
+                end
             end
-        end
-
-        -- Recurse into non-scope nodes
-        local t = child:type()
-        if not langspec.scope_nodes[t] then
-            _ts_get_identifiers_in_scope(child, bufnr, row, langspec, results)
         end
     end
 end
 
-local function _place_variables_virttext(frame, data)
-    if not (data.variables and frame.source and frame.source.path and frame.line) then
+---@param frame loopdebug.proto.StackFrame
+---@param variables loopdebug.proto.Variable[]
+local function _place_variables_virttext(frame, variables)
+    if not (variables and frame.source and frame.source and frame.line) then
         return
     end
-
-    if not filetools.file_exists(frame.source.path) then
-        return
-    end
-
     local filepath = frame.source.path
+    if not filepath then return end
+
+    if not filetools.file_exists(filepath) then
+        return
+    end
+
     local bufnr = vim.fn.bufnr(filepath)
     if bufnr == -1 then return end
 
     local langspec = tslangspec.get_lang_spec(vim.bo[bufnr].filetype)
-
-    _vars_extmarks_group.remove_extmarks()
 
     local lang = vim.treesitter.language.get_lang(vim.bo[bufnr].filetype)
     local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
@@ -130,7 +128,7 @@ local function _place_variables_virttext(frame, data)
     -- Debugger → name → trimmed value
     --------------------------------------------------------------------
     local dbg_vars = {}
-    for _, v in ipairs(data.variables) do
+    for _, v in ipairs(variables) do
         if v.name and v.value then
             dbg_vars[v.name] = vim.trim(v.value)
         end
@@ -159,7 +157,7 @@ local function _place_variables_virttext(frame, data)
         local sr, _, _, _ = id_node:range() -- 0-based
 
         _vars_extmark_id = _vars_extmark_id + 1
-        _vars_extmarks_group.place_file_extmark(_vars_extmark_id, filepath, sr + 1, 0, {
+        _vars_extmarks_group.place_file_extmark(_vars_extmark_id, filepath, sr + 1, 1, {
             virt_text     = {
                 { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
                 { text, "LoopDebugVarPill" },
@@ -196,18 +194,22 @@ local function _place_variables_virttext(frame, data)
     --------------------------------------------------------------------
     -- Process scopes from inner → outer (respect shadowing)
     --------------------------------------------------------------------
-    local seen = {} -- name → true (already displayed from inner scope)
-
     for _, scope_node in ipairs(scope_stack) do
+        if next(dbg_vars) == nil then break end
         local decls = {}
         _ts_get_identifiers_in_scope(scope_node, bufnr, cursor_row, langspec, decls)
+        -- Reverse lookup
+        table.sort(decls, function(a, b)
+            return a.row > b.row
+        end)
         for _, entry in ipairs(decls) do
+            if next(dbg_vars) == nil then break end
             local name = entry.name
-            if name and not seen[name] then
+            if name then
                 local value = dbg_vars[name]
                 if value then
-                    place_value(entry.id_node or entry.node, name, value)
-                    seen[name] = true
+                    place_value(entry.node, name, value)
+                    dbg_vars[name] = nil
                 end
             end
         end
@@ -225,16 +227,29 @@ local function _place_locals_virttext(view)
     view.data_providers.scopes_provider({ frameId = frame.id }, function(_, scopes_data)
         if sequence ~= _current_sequence then return end
         if scopes_data and scopes_data.scopes then
+            local managed_scopes = {}
             for _, scope in pairs(scopes_data.scopes) do
-                if scope.presentationHint == "locals" or scope.name == "Local" then
-                    view.data_providers.variables_provider({ variablesReference = scope.variablesReference },
-                        function(err, data)
-                            if sequence ~= _current_sequence then return end
-                            if data then
-                                _place_variables_virttext(frame, data)
-                            end
-                        end)
+                if (scope.presentationHint == "locals" or scope.name == "Local") and not scope.expensive then
+                    table.insert(managed_scopes, scope)
                 end
+            end
+            ---@type loopdebug.proto.Variable[]
+            local variables = {}
+            local nb_replies = 0
+            for _, scope in pairs(managed_scopes) do
+                view.data_providers.variables_provider({ variablesReference = scope.variablesReference },
+                    function(err, respone)
+                        if sequence ~= _current_sequence then return end
+                        nb_replies = nb_replies + 1
+                        if respone and respone.variables then
+                            vim.list_extend(variables, respone.variables)
+                        end
+                        if nb_replies == #managed_scopes then
+                            _cancel_deferred_remove_locals_virttext()
+                            _vars_extmarks_group.remove_extmarks()
+                            _place_variables_virttext(frame, variables)
+                        end
+                    end)
             end
         end
     end)
@@ -250,7 +265,6 @@ function M.on_view_udpate(view)
         return
     end
     if config.current.enable_inlay_variables then
-        _cancel_deferred_remove_locals_virttext()
         _place_locals_virttext(view)
     end
 end
