@@ -116,18 +116,20 @@ local function _ts_get_identifiers_in_scope(scope, bufnr, row, langspec, results
     local found = {}
     ---@type TSNode[]
     for child in scope:iter_children() do
-        local r = select(1, child:start())
+        local r = child:start()
         if r <= row then
             -- Collect all identifier nodes in reversed order
             local ids = _ts_find_scope_identifiers(child, row, langspec)
             for _, id in ipairs(ids) do
                 local name = vim.treesitter.get_node_text(id, bufnr)
+                local id_row, id_col = id:start()
                 if name and name ~= "" then
                     -- keep only the last instance of each name
                     found[name] = {
                         node = id,
                         name = name,
-                        row = id:start()
+                        row = id_row,
+                        col = id_col
                     }
                 end
             end
@@ -136,7 +138,11 @@ local function _ts_get_identifiers_in_scope(scope, bufnr, row, langspec, results
     local decls = vim.tbl_values(found)
     -- sort by latest
     table.sort(decls, function(a, b)
-        return a.row > b.row
+        if a.row ~= b.row then
+            return a.row > b.row
+        else
+            return a.col > b.col -- extmarks insertion order is reversed
+        end
     end)
     return decls
 end
@@ -198,10 +204,10 @@ local function _place_variables_virttext(frame, variables)
             strtools.crop_string_for_ui(display, display_len)
         )
 
-        local sr, _, _, _ = id_node:range() -- 0-based
+        local sr, sc, _, _ = id_node:range() -- 0-based
 
         _vars_extmark_id = _vars_extmark_id + 1
-        _place_file_extmark(_vars_extmark_id, filepath, sr + 1, 1, {
+        _place_file_extmark(_vars_extmark_id, filepath, sr + 1, sc, {
             virt_text     = {
                 { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
                 { text, "LoopDebugVarPill" },
