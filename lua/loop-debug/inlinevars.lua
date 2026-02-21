@@ -111,30 +111,34 @@ end
 ---@param bufnr integer
 ---@param row integer
 ---@param langspec loopdebug.TSLangSpec
----@param results {node: TSNode?, name: string?,row :number}[]
+---@return {node: TSNode?, name: string?,row :number}[]
 local function _ts_get_identifiers_in_scope(scope, bufnr, row, langspec, results)
+    local found = {}
     ---@type TSNode[]
     for child in scope:iter_children() do
         local r = select(1, child:start())
         if r <= row then
-            local found = {}
             -- Collect all identifier nodes in reversed order
             local ids = _ts_find_scope_identifiers(child, row, langspec)
             for _, id in ipairs(ids) do
                 local name = vim.treesitter.get_node_text(id, bufnr)
                 if name and name ~= "" then
-                    if not found[name] then
-                        found[name] = true
-                        table.insert(results, {
-                            node = id,
-                            name = name,
-                            row = id:start()
-                        })
-                    end
+                    -- keep only the last instance of each name
+                    found[name] = {
+                        node = id,
+                        name = name,
+                        row = id:start()
+                    }
                 end
             end
         end
     end
+    local decls = vim.tbl_values(found)
+    -- sort by latest
+    table.sort(decls, function(a, b)
+        return a.row > b.row
+    end)
+    return decls
 end
 
 ---@param frame loopdebug.proto.StackFrame
@@ -208,40 +212,32 @@ local function _place_variables_virttext(frame, variables)
         })
     end
 
+    local cursor_row = frame.line - 1 -- 0-based
+    local cursor_col = (frame.column or 1) - 1
     --------------------------------------------------------------------
     -- Build scope stack (innermost → outermost)
     --------------------------------------------------------------------
-    local cursor_row = frame.line - 1 -- 0-based
-    local cursor_col = (frame.column or 1) - 1
-
-    local current = root:descendant_for_range(cursor_row, cursor_col, cursor_row, cursor_col + 1)
-    if not current then return end
-
     ---@type TSNode[]
     local scope_stack = {}
+    do
+        local current = root:descendant_for_range(cursor_row, cursor_col, cursor_row, cursor_col)
+        if not current then return end
 
-    ---@type TSNode?
-    local n = current
-    while n do
-        if langspec.scope_nodes[n:type()] then
-            table.insert(scope_stack, n)
+        ---@type TSNode?
+        local n = current
+        while n do
+            if langspec.scope_nodes[n:type()] then
+                table.insert(scope_stack, n)
+            end
+            n = n:parent()
         end
-        n = n:parent()
     end
-
-    -- Now scope_stack[1] = innermost
-
     --------------------------------------------------------------------
     -- Process scopes from inner → outer (respect shadowing)
     --------------------------------------------------------------------
     for _, scope_node in ipairs(scope_stack) do
         if next(dbg_vars) == nil then break end
-        local decls = {}
-        _ts_get_identifiers_in_scope(scope_node, bufnr, cursor_row, langspec, decls)
-        -- Reverse lookup
-        table.sort(decls, function(a, b)
-            return a.row > b.row
-        end)
+        local decls = _ts_get_identifiers_in_scope(scope_node, bufnr, cursor_row, langspec)
         for _, entry in ipairs(decls) do
             if next(dbg_vars) == nil then break end
             local name = entry.name
