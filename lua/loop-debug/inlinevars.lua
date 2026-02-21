@@ -269,7 +269,8 @@ local function _place_locals_virttext(view)
         if scopes_data and scopes_data.scopes then
             local managed_scopes = {}
             for _, scope in pairs(scopes_data.scopes) do
-                if (scope.presentationHint == "locals" or scope.name == "Local") and not scope.expensive then
+                local loname = scope.name and tostring(scope.name):lower() or nil
+                if not scope.expensive and scope.presentationHint ~= "globals" and scope.presentationHint ~= "registers" and loname ~= "global" and loname ~= "globals" and loname ~= "registers" and loname ~= "static" then
                     table.insert(managed_scopes, scope)
                 end
             end

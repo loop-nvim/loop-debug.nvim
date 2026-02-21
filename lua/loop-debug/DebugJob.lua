@@ -397,7 +397,7 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
 
     -- Process Output
     if not sess_data.debuggee_output_ctrl then
-        local page_data = self._page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output" })
+        local page_data = self._page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output", activate = true })
         if page_data then
             sess_data.debuggee_output_ctrl = page_data.output_buf
         end
