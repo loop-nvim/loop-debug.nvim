@@ -160,18 +160,6 @@ local function _on_breakpoint_disabled(bp)
 end
 
 ---@param bp loopdebug.SourceBreakpoint
----@param old_line number
-local function _on_breakpoint_moved(bp, old_line)
-    local data = _breakpoints_data[bp.id]
-    if not data then
-        return
-    end
-
-    -- Sign is already moved by Neovim; just refresh its appearance
-    _refresh_breakpoint_sign(bp.id, data)
-end
-
----@param bp loopdebug.SourceBreakpoint
 local function _on_breakpoint_removed(bp)
     _breakpoints_data[bp.id] = nil
     _sign_group.remove_file_sign(bp.id)
@@ -276,13 +264,7 @@ function M.init()
     local symbols = config.current.symbols
     assert(symbols)
 
-    _sign_group = loopsigns.define_group("Breakpoints", {priority = config.current.sign_priority.breakpoints},
-        function(file, signs)
-            for id, sign in pairs(signs) do
-                -- Update breakpoint line to match sign
-                breakpoints.update_breakpoint_line(id, sign.lnum)
-            end
-        end)
+    _sign_group = loopsigns.define_group("Breakpoints", {priority = config.current.sign_priority.breakpoints})
 
     for name, full_name in pairs(_sign_names) do
         _sign_group.define_sign(full_name, symbols[name], highlight)
@@ -292,7 +274,6 @@ function M.init()
         on_set = _on_breakpoint_set,
         on_enabled = _on_breakpoint_enabled,
         on_disabled = _on_breakpoint_disabled,
-        on_moved = _on_breakpoint_moved,
         on_removed = _on_breakpoint_removed,
         on_all_removed = _on_all_breakpoints_removed
     })

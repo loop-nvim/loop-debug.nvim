@@ -22,7 +22,6 @@ local persistence         = require('loop-debug.persistence')
 ---@field on_all_removed fun(bpts:loopdebug.SourceBreakpoint[])|nil
 ---@field on_enabled fun(bp:loopdebug.SourceBreakpoint)|nil
 ---@field on_disabled fun(bp:loopdebug.SourceBreakpoint)|nil
----@field on_moved fun(bp:loopdebug.SourceBreakpoint,old_line:number)|nil
 
 local _last_breakpoint_id = 1000
 
@@ -283,31 +282,6 @@ end
 
 function M.disable_all_breakpoints()
     _set_all_enabled(false)
-end
-
----@param id number
----@param newline number
----@return boolean
-function M.update_breakpoint_line(id, newline)
-    local bp = _by_id[id]
-    if not bp or bp.line == newline then
-        return false
-    end
-
-    local old_line = bp.line
-    local file = bp.file
-
-    local lines = _source_breakpoints[file]
-    if lines then
-        lines[old_line] = nil
-        lines[newline] = id
-    end
-
-    bp.line = newline
-
-    _trackers:invoke("on_moved", bp, old_line)
-
-    return true
 end
 
 ---@param file string

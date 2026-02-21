@@ -68,7 +68,6 @@ local function _start_debug_job(args, page_group, startup_callback, exit_handler
         on_removed = function(bp) job:remove_breakpoint(bp) end,
         on_enabled = function(bp) job:update_breakpoint(bp) end,
         on_disabled = function(bp) job:update_breakpoint(bp) end,
-        on_moved = function(bp) job:update_breakpoint(bp) end,
         on_all_removed = function(bpts) job:remove_all_breakpoints(bpts) end
     })
 
