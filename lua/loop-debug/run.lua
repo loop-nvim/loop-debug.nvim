@@ -34,7 +34,7 @@ local function _create_job_tracker(task_name, on_exit)
         on_breakpoint_event = function(sess_id, sess_name, event)
             manager.on_breakpoint_event(sess_id, event)
         end,
-        on_variable_change = function (sess_id, sess_name)
+        on_variable_change = function(sess_id, sess_name)
             manager.on_session_variable_change(sess_id, sess_name)
         end,
         on_startup_error = function()
@@ -115,7 +115,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     end
 
     ---- debug adapter config ---
-    ---@type loopdebug.AdapterConfig
+    ---@type loopdebug.AdapterConfig?
     local adapter_config
     if type(debugger.adapter_config) == "function" then
         ---@type loopdebug.TaskContext
@@ -123,10 +123,10 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
             task = task,
             ws_dir = ws_dir
         }
-        ---@type loopdebug.AdapterConfig
-        adapter_config = debugger.adapter_config(task_context)
+        local err_msg
+        adapter_config, err_msg = debugger.adapter_config(task_context)
         if type(adapter_config) ~= "table" then
-            return nil, "debugger.adapter_config function must return a table"
+            return nil, err_msg or "debugger.adapter_config function error"
         end
     else
         -- deep copy because a badly coded hook may change the config

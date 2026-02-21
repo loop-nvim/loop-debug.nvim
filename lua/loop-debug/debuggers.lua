@@ -27,7 +27,7 @@ end
 ---@field user_data any
 
 ---@class loopdebug.Config.Debugger
----@field adapter_config loopdebug.AdapterConfig|fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig
+---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
@@ -90,20 +90,27 @@ local debuggers = {}
 -- Lua (Local/Remote)
 -- ==================================================================
 debuggers.lua = {
-    adapter_config = {
-        adapter_id = "lua",
-        name = "Local Lua Debugger",
-        type = "executable",
-        command = {
-            "node",
-            vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode", "extension",
-                "extension", "debugAdapter.js"),
-        },
-        env = {
-            LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
-                "extension", "debugger", "?.lua") .. ";;"
-        },
-    },
+    adapter_config = function(ctx)
+        local adapter_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
+            "extension", "extension", "debugAdapter.js")
+        ---@diagnostic disable-next-line: undefined-field
+        if not vim.uv.fs_stat(adapter_path) then
+            return nil, ("local-lua-debugger-vscode debug adapter not found in Mason packages (%s)"):format(adapter_path)
+        end
+        return {
+            adapter_id = "lua",
+            name = "Local Lua Debugger",
+            type = "executable",
+            command = {
+                "node",
+                adapter_path,
+            },
+            env = {
+                LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
+                    "extension", "debugger", "?.lua") .. ";;"
+            },
+        }
+    end,
     launch_args = function(context)
         return {
             type = "lua-local",

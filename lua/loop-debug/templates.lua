@@ -17,7 +17,7 @@ return {
     {
         name = "Attach to remote Lua process",
         task = {
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "lua:remote",
             request = "attach",
@@ -49,7 +49,7 @@ return {
         name = "Attach to running process (LLDB)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "lldb",
             request = "attach",
@@ -83,7 +83,7 @@ return {
         name = "Attach to running process (codelldb)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "codelldb",
             request = "attach",
@@ -114,7 +114,7 @@ return {
         name = "Attach to Node.js process (js-debug)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "js-debug",
             request = "attach",
@@ -143,7 +143,7 @@ return {
         name = "Attach to Python debug server (debugpy)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "debugpy:remote",
             request = "attach",
@@ -171,7 +171,7 @@ return {
         name = "Attach to Go process (delve)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "go",
             request = "attach",
@@ -200,7 +200,7 @@ return {
         name = "Attach to running Chrome",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "chrome",
             request = "attach",
@@ -256,7 +256,7 @@ return {
         name = "Attach to .NET process",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "netcoredbg",
             request = "attach",
@@ -270,7 +270,7 @@ return {
         name = "Attach to Java process (JDWP)",
         task = {
 
-            name = "Attach",
+            name = "Debug",
             type = "debug",
             debugger = "java",
             request = "attach",
