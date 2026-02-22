@@ -475,7 +475,7 @@ function M.select_breakpoint(ws_dir)
     -- Formatter: generate label_chunks with highlights
     -- ---------------------------------------------------------------
     ---@param sign loop.signs.SignInfo
-    ---@return string[][] label_chunks, string[][] virt_text_chunks
+    ---@return string[][] label_chunks, string[][][] virt_lines
     local function format_breakpoint_chunks(sign)
         ---@type loop.debug_ui.BreakpointSignData
         local data = sign.user_data
@@ -521,20 +521,19 @@ function M.select_breakpoint(ws_dir)
             { text,   nil },
         }
 
-        local vt_chunks = {}
+        local virt_lines = {}
         if data.condition and data.condition ~= "" then
-            table.insert(vt_chunks, { " if " .. data.condition, "Conditional" })
+            table.insert(virt_lines, { { "  Condition: ", "Conditional" }, { data.condition } })
         end
         if data.hitCondition and data.hitCondition ~= "" then
-            if #vt_chunks ~= 0 then table.insert(vt_chunks, {" |"}) end
-            table.insert(vt_chunks, { " hits: " .. data.hitCondition, "Number" })
+            table.insert(virt_lines, { { "  Hit condition: ", "Conditional" }, { data.hitCondition } })
         end
         if data.logMessage and data.logMessage ~= "" then
-            if #vt_chunks ~= 0 then table.insert(vt_chunks, {" |"}) end
-            table.insert(vt_chunks, { " log: " .. data.logMessage:gsub("\n", " "), "Comment" })
+            local msg = data.logMessage:gsub("\n", " ")
+            table.insert(virt_lines, { { "  Log: ", "Conditional" }, { msg } })
         end
 
-        return label_chunks, vt_chunks
+        return label_chunks, virt_lines
     end
 
     -- ---------------------------------------------------------------
@@ -542,10 +541,10 @@ function M.select_breakpoint(ws_dir)
     -- ---------------------------------------------------------------
     local choices = {}
     for _, sign in ipairs(_sign_group.get_signs(true)) do
-        local label_chunks, vt_chunks = format_breakpoint_chunks(sign)
+        local label_chunks, virt_lines = format_breakpoint_chunks(sign)
         table.insert(choices, {
             label_chunks = label_chunks, -- highlight-aware display
-            virt_text_chunks = vt_chunks,
+            virt_lines = virt_lines,
             file = sign.file,
             lnum = sign.lnum,
             data = {
