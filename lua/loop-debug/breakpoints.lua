@@ -528,10 +528,10 @@ function M.select_breakpoint(ws_dir)
         table.insert(choices, {
             label = format_breakpoint(sign),
             file = sign.file,
-            line = sign.lnum,
+            lnum = sign.lnum,
             data = {
-                file = sign.file,
-                line = sign.lnum,
+                file = sign.file or "",
+                lnum = sign.lnum or 1,
                 column = sign.user_data.column,
                 sign = sign
             }
@@ -545,16 +545,15 @@ function M.select_breakpoint(ws_dir)
         if a.file ~= b.file then
             return a.file < b.file
         end
-        return a.line < b.line
+        return a.lnum < b.lnum
     end)
     selector.select({
         prompt = "Breakpoints",
         items = choices,
         file_preview = true,
-        callback = function(bp)
-            ---@cast bp loopdebug.SourceBreakpoint
-            if bp and bp.file then
-                uitools.smart_open_file(bp.file, bp.line, bp.column)
+        callback = function(data)
+            if data and data.file then
+                uitools.smart_open_file(data.file, data.lnum, data.column)
             end
         end
     })

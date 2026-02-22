@@ -44,7 +44,7 @@ local function _item_formatter(id, data)
         table.insert(chunks, { " ", nil })
         table.insert(chunks, {
             string.format("[%d paused thread%s]", nb_paused, s),
-            "DiagnosticInfo",
+            "Comment",
         })
     end
     return chunks
