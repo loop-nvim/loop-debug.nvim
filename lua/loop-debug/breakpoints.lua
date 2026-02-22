@@ -9,7 +9,7 @@ local persistence         = require('loop-debug.persistence')
 ---@class loopdebug.SourceBreakpoint
 ---@field id number
 ---@field file string
----@field line integer
+---@field line integer      
 ---@field column integer|nil
 ---@field condition string|nil
 ---@field hitCondition string|nil

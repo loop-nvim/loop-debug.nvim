@@ -38,7 +38,7 @@ end
 ---@param line integer   -- 1-based
 ---@param col integer    -- 1-based
 ---@param opts table
-local function _place_file_extmark(id, filepath, line, col, opts)
+local function _set_file_extmark(id, filepath, line, col, opts)
     local bufnr = vim.fn.bufnr(filepath)
     if bufnr == -1 then return end
     if not vim.api.nvim_buf_is_loaded(bufnr) then return end
@@ -149,7 +149,7 @@ end
 
 ---@param frame loopdebug.proto.StackFrame
 ---@param variables loopdebug.proto.Variable[]
-local function _place_variables_virttext(frame, variables)
+local function _set_variables_virttext(frame, variables)
     if not (variables and frame.source and frame.source and frame.line) then
         return
     end
@@ -189,7 +189,7 @@ local function _place_variables_virttext(frame, variables)
     --------------------------------------------------------------------
     -- Place helper
     --------------------------------------------------------------------
-    local function place_value(id_node, name, value)
+    local function set_value(id_node, name, value)
         local display = tostring(value)
         local name_len = #name
         local display_len = #display
@@ -207,7 +207,7 @@ local function _place_variables_virttext(frame, variables)
         local sr, sc, _, _ = id_node:range() -- 0-based
 
         _vars_extmark_id = _vars_extmark_id + 1
-        _place_file_extmark(_vars_extmark_id, filepath, sr + 1, sc, {
+        _set_file_extmark(_vars_extmark_id, filepath, sr + 1, sc, {
             virt_text     = {
                 { "", "LoopDebugVarPillSep" }, -- left rounded cap (many themes have these)
                 { text, "LoopDebugVarPill" },
@@ -250,7 +250,7 @@ local function _place_variables_virttext(frame, variables)
             if name then
                 local value = dbg_vars[name]
                 if value then
-                    place_value(entry.node, name, value)
+                    set_value(entry.node, name, value)
                     dbg_vars[name] = nil
                 end
             end
@@ -259,7 +259,7 @@ local function _place_variables_virttext(frame, variables)
 end
 
 ---@param view loopdebug.events.CurrentViewUpdate
-local function _place_locals_virttext(view)
+local function _set_locals_virttext(view)
     local frame = view.frame
     if not (frame and frame.source and frame.source.path) then
         return
@@ -290,7 +290,7 @@ local function _place_locals_virttext(view)
                         if nb_replies == #managed_scopes then
                             _cancel_deferred_remove_locals_virttext()
                             _remove_extmarks()
-                            _place_variables_virttext(frame, variables)
+                            _set_variables_virttext(frame, variables)
                         end
                     end)
             end
@@ -321,7 +321,7 @@ function M.init()
                 _deferred_remove_locals_virttext()
             else
                 --vim.notify("planing inline vars (view update)")
-                _place_locals_virttext(view)
+                _set_locals_virttext(view)
             end
         end
     })
@@ -339,7 +339,7 @@ function M.init()
                         local source_path = vim.fn.fnamemodify(frame.source.path, ":p") -- normalize
                         if bufpath == source_path then
                             --vim.notify("planing inline vars (bufenter)")
-                            _place_locals_virttext(view)
+                            _set_locals_virttext(view)
                         end
                     end
                 end

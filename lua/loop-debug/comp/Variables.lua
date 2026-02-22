@@ -70,7 +70,7 @@ end
 ---@param old string
 ---@param new string
 ---@return boolean
-local function _replace_expr(old, new)
+local function _reset_expr(old, new)
     local data = persistence.get_config("expr")
     if not data then return false end
     ---@cast data string[]
@@ -438,7 +438,7 @@ function Variables:link_to_buffer(comp)
                         self:_load_expressions(self._query_context)
                     end
                 elseif expr ~= item.data.name then
-                    if _replace_expr(item.data.name, expr) then
+                    if _reset_expr(item.data.name, expr) then
                         -- ONLY reload watches
                         self:_load_expressions(self._query_context)
                     end

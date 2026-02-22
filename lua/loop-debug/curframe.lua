@@ -40,7 +40,7 @@ function M.init()
                 -- Open file and move cursor
                 uitools.smart_open_file(frame.source.path, frame.line, frame.column)
                 -- Place sign for current frame
-                _sign_group.place_file_sign(1, frame.source.path, frame.line, _sign_name)
+                _sign_group.set_file_sign(1, frame.source.path, frame.line, _sign_name)
             end
         end
     })
