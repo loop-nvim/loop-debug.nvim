@@ -470,17 +470,18 @@ function M.select_breakpoint(ws_dir)
     end
     local symbols = config.current.symbols
     assert(symbols)
-    -- ---------------------------------------------------------------
-    -- Formatter
-    -- ---------------------------------------------------------------
 
+    -- ---------------------------------------------------------------
+    -- Formatter: generate label_chunks with highlights
+    -- ---------------------------------------------------------------
     ---@param sign loop.signs.SignInfo
-    ---@return string
-    local function format_breakpoint(sign)
+    ---@return string[][] label_chunks, string[][] virt_text_chunks
+    local function format_breakpoint_chunks(sign)
         ---@type loop.debug_ui.BreakpointSignData
         local data = sign.user_data
         local verified = _get_breakpoint_state(data)
         local symbol
+
         if data.enabled == false then
             if data.logMessage and data.logMessage ~= "" then
                 symbol = symbols.disabled_logpoint
@@ -492,41 +493,59 @@ function M.select_breakpoint(ws_dir)
             end
         else
             if data.logMessage and data.logMessage ~= "" then
-                symbol = verified and symbols.logpoint
-                    or symbols.inactive_logpoint
+                if verified then
+                    symbol = symbols.logpoint
+                else
+                    symbol = symbols.inactive_logpoint
+                end
             elseif (data.condition and data.condition ~= "")
                 or (data.hitCondition and data.hitCondition ~= "") then
-                symbol = verified and symbols.cond_breakpoint
-                    or symbols.inactive_cond_breakpoint
+                if verified then
+                    symbol = symbols.cond_breakpoint
+                else
+                    symbol = symbols.inactive_cond_breakpoint
+                end
             else
-                symbol = verified and symbols.active_breakpoint
-                    or symbols.inactive_breakpoint
+                if verified then
+                    symbol = symbols.active_breakpoint
+                else
+                    symbol = symbols.inactive_breakpoint
+                end
             end
         end
+
         local rel = vim.fs.relpath(ws_dir, sign.file) or sign.file
-        local parts = {
-            symbol,
-            " ",
-            rel,
-            ":",
-            tostring(sign.lnum),
+        local text = (" %s:%s"):format(rel, tostring(sign.lnum))
+        local label_chunks = {
+            { symbol, "Debug" },
+            { text,   nil },
         }
+
+        local vt_chunks = {}
         if data.condition and data.condition ~= "" then
-            table.insert(parts, " | if " .. data.condition)
+            table.insert(vt_chunks, { " if " .. data.condition, "Conditional" })
         end
         if data.hitCondition and data.hitCondition ~= "" then
-            table.insert(parts, " | hits: " .. data.hitCondition)
+            if #vt_chunks ~= 0 then table.insert(vt_chunks, {" |"}) end
+            table.insert(vt_chunks, { " hits: " .. data.hitCondition, "Number" })
         end
         if data.logMessage and data.logMessage ~= "" then
-            table.insert(parts, " | log: " .. data.logMessage:gsub("\n", " "))
+            if #vt_chunks ~= 0 then table.insert(vt_chunks, {" |"}) end
+            table.insert(vt_chunks, { " log: " .. data.logMessage:gsub("\n", " "), "Comment" })
         end
-        return table.concat(parts, "")
+
+        return label_chunks, vt_chunks
     end
-    ---@type table[]
+
+    -- ---------------------------------------------------------------
+    -- Build selector items with label_chunks
+    -- ---------------------------------------------------------------
     local choices = {}
     for _, sign in ipairs(_sign_group.get_signs(true)) do
+        local label_chunks, vt_chunks = format_breakpoint_chunks(sign)
         table.insert(choices, {
-            label = format_breakpoint(sign),
+            label_chunks = label_chunks, -- highlight-aware display
+            virt_text_chunks = vt_chunks,
             file = sign.file,
             lnum = sign.lnum,
             data = {
@@ -537,16 +556,19 @@ function M.select_breakpoint(ws_dir)
             }
         })
     end
+
     if #choices == 0 then
         vim.notify('No existing breakpoints')
         return
     end
+
     table.sort(choices, function(a, b)
         if a.file ~= b.file then
             return a.file < b.file
         end
         return a.lnum < b.lnum
     end)
+
     selector.select({
         prompt = "Breakpoints",
         items = choices,

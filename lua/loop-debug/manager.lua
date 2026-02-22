@@ -1,10 +1,11 @@
-local breakpoints        = require('loop-debug.breakpoints')
-local daptools           = require('loop-debug.dap.daptools')
-local debugevents        = require('loop-debug.debugevents')
-local selector           = require('loop.tools.selector')
-local floatwin           = require('loop.tools.floatwin')
+local breakpoints   = require('loop-debug.breakpoints')
+local daptools      = require('loop-debug.dap.daptools')
+local debugevents   = require('loop-debug.debugevents')
+local selector      = require('loop.tools.selector')
+local floatwin      = require('loop.tools.floatwin')
+local strtools      = require('loop.tools.strtools')
 
-local M                  = {}
+local M             = {}
 
 -- =============================================================================
 -- Type Definitions
@@ -42,7 +43,7 @@ local M                  = {}
 ---@field session_data table<number, loopdebug.mgr.SessionData>
 
 ---@type loopdebug.mgr.ManagerData
-local _manager_data      = {
+local _manager_data = {
     session_ctx = 1,
     view_update_seq = 0,
     session_data = {}
@@ -510,6 +511,26 @@ end
 
 ---@return boolean, string|nil
 local function _process_select_frame_command()
+    local format_frame = function(frame)
+        local chunks = {}
+        local max_namelen = math.max(2, math.floor(vim.o.columns / 2))
+        table.insert(chunks, { tostring(strtools.crop_string_for_ui(frame.name, max_namelen)) })
+        if frame.source and frame.source.name then
+            table.insert(chunks, { " - " })
+            table.insert(chunks, { tostring(frame.source.name), "@module" })
+
+            if frame.line then
+                table.insert(chunks, { ":" })
+                table.insert(chunks, { tostring(frame.line), "@number" })
+
+                if frame.column then
+                    table.insert(chunks, { ":" })
+                    table.insert(chunks, { tostring(frame.column), "@number" })
+                end
+            end
+        end
+        return chunks
+    end
     local mgr_data = _manager_data
     local sess_id = mgr_data.current_session_id
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
@@ -527,7 +548,7 @@ local function _process_select_frame_command()
                 local choices = {}
                 local initial
                 for _, frame in pairs(data.stackFrames) do
-                    table.insert(choices, { label = tostring(frame.name), data = frame })
+                    table.insert(choices, { label_chunks = format_frame(frame), data = frame })
                     if sess_data.cur_frame and frame.id == sess_data.cur_frame.id then
                         initial = #choices
                     end

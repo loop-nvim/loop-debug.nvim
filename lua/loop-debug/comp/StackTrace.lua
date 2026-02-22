@@ -27,8 +27,7 @@ local function _item_formatter(id, data)
     table.insert(chunks, { tostring(frame.name), "@function" })
 
     if frame.source and frame.source.name then
-        table.insert(chunks, { " " })  -- separator before dash
-        table.insert(chunks, { "- " }) -- actual dash
+        table.insert(chunks, { " - " })  -- separator before dash
         table.insert(chunks, { tostring(frame.source.name), "@module" })
 
         if frame.line then
