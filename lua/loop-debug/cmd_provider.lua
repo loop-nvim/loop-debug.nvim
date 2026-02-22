@@ -2,7 +2,6 @@ local M = {}
 
 local manager = require("loop-debug.manager")
 local debugui = require("loop-debug.ui")
-local strtools = require("loop.tools.strtools")
 
 local function _debug_commands(args)
     if #args == 0 then
@@ -32,9 +31,9 @@ local function _debug_commands(args)
         }
     end
     if #args == 1 and args[1] == "breakpoint" then
-        return { "list", "toggle", "logpoint", "conditional",
+        return { "list", "set", "logpoint", "conditional",
             "enable", "disable", "toggle_enabled", "disable_all", "enable_all",
-            "clear_file", "clear_all" }
+            "delete", "clear_file", "clear_all" }
     end
     return {}
 end

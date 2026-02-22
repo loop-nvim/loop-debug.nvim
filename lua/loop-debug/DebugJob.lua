@@ -173,8 +173,7 @@ function DebugJob:remove_breakpoint(bp)
     end
 end
 
----@param removed loopdebug.SourceBreakpoint[]
-function DebugJob:remove_all_breakpoints(removed)
+function DebugJob:remove_all_breakpoints()
     self._breakpoints = {}
     for _, data in pairs(self._session_data) do
         data.session:remove_all_breakpoints()

@@ -1,5 +1,4 @@
 local breakpoints        = require('loop-debug.breakpoints')
-local breakpointsmonitor = require('loop-debug.breakpointsmonitor')
 local daptools           = require('loop-debug.dap.daptools')
 local debugevents        = require('loop-debug.debugevents')
 local selector           = require('loop.tools.selector')
@@ -603,7 +602,7 @@ function M.debug_command(command, args, opts, wsdir)
     if command == "breakpoint" then
         local bp_cmd = args[2]
         if bp_cmd == "list" then
-            breakpointsmonitor.select_breakpoint(wsdir)
+            breakpoints.select_breakpoint(wsdir)
         else
             breakpoints.breakpoints_command(bp_cmd)
         end
