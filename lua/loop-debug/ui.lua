@@ -90,19 +90,19 @@ local function _save_layout()
 
     -- Compute total height and current height ratios
     local total_lines = 0
-    local current_ratios = {}
+    local height_ratios = {}
     for i, win in ipairs(windows) do
         if vim.api.nvim_win_is_valid(win) then
             local h = vim.api.nvim_win_get_height(win)
             total_lines = total_lines + h
-            current_ratios[i] = h
+            height_ratios[i] = h
         else
             return
         end
     end
 
-    for i, h in ipairs(current_ratios) do
-        current_ratios[i] = h / total_lines
+    for i, h in ipairs(height_ratios) do
+        height_ratios[i] = h / total_lines
     end
 
     -- Compute current width ratio for the first window
@@ -116,27 +116,31 @@ local function _save_layout()
     local saved = persistence.get_config("layout") or {}
     local epsilon = 1.2 / vim.o.lines
 
-    local ratios_changed = false
+    local height_changed = false
     if saved.height_ratios then
-        for i, r in ipairs(current_ratios) do
+        for i, r in ipairs(height_ratios) do
             if math.abs(r - (saved.height_ratios[i] or 0)) > epsilon then
-                ratios_changed = true
+                height_changed = true
                 break
             end
         end
     else
-        ratios_changed = true
+        height_changed = true
     end
 
     local width_changed = math.abs(width_ratio - (saved.width_ratio or 0)) > epsilon
 
     -- Only save if something meaningful changed
-    if ratios_changed or width_changed then
-        persistence.set_config("layout", {
-            total_lines = total_lines,
-            height_ratios = current_ratios,
-            width_ratio = width_ratio,
-        })
+    if height_changed or width_changed then
+        local config = persistence.get_config("layout") or {}
+        config.total_lines = total_lines
+        if height_changed then
+            config.height_ratios = height_ratios
+        end
+        if width_changed then
+            config.width_ratio = width_ratio
+        end
+        persistence.set_config("layout", config)
     end
 end
 
@@ -213,28 +217,7 @@ local function _create_components(windows)
 end
 
 local function _on_resize()
-    local windows = get_managed_windows()
-    if #windows ~= #_window_defs then
-        return
-    end
-
-    local wins = vim.v.event.windows
-    if wins and #windows > 0 then
-        local ours_only = true
-        for _, win in ipairs(wins) do
-            if not vim.tbl_contains(windows, win) then
-                ours_only = false
-                break
-            end
-        end
-        if ours_only then
-            _save_layout()
-        else
-            vim.defer_fn(function()
-                _apply_layout()
-            end, 0)
-        end
-    end
+    _save_layout()
 end
 
 -- ======================================
