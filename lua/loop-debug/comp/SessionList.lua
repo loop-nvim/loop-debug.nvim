@@ -120,8 +120,8 @@ function SessionListComp:dispose()
     for _, timer in pairs(self._deferred_update_timers) do
         if timer:is_active() then
             timer:stop()
+            timer:close()
         end
-        timer:close()
     end
     self._deferred_update_timers = {}
 end
