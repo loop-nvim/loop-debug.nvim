@@ -511,26 +511,6 @@ end
 
 ---@return boolean, string|nil
 local function _process_select_frame_command()
-    local format_frame = function(frame)
-        local chunks = {}
-        local max_namelen = math.max(2, math.floor(vim.o.columns / 2))
-        table.insert(chunks, { tostring(strtools.crop_string_for_ui(frame.name, max_namelen)) })
-        if frame.source and frame.source.name then
-            table.insert(chunks, { " - " })
-            table.insert(chunks, { tostring(frame.source.name), "@module" })
-
-            if frame.line then
-                table.insert(chunks, { ":" })
-                table.insert(chunks, { tostring(frame.line), "@number" })
-
-                if frame.column then
-                    table.insert(chunks, { ":" })
-                    table.insert(chunks, { tostring(frame.column), "@number" })
-                end
-            end
-        end
-        return chunks
-    end
     local mgr_data = _manager_data
     local sess_id = mgr_data.current_session_id
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
@@ -545,10 +525,19 @@ local function _process_select_frame_command()
             if err or not data then
                 vim.notify("Failed to load call stack: " .. (err or ""))
             else
+                local max_namelen = math.max(2, math.floor(vim.o.columns / 2))
+                ---@type loop.SelectorItem[]
                 local choices = {}
                 local initial
                 for _, frame in pairs(data.stackFrames) do
-                    table.insert(choices, { label_chunks = format_frame(frame), data = frame })
+                    table.insert(choices,
+                        ---@type loop.SelectorItem
+                        {
+                            label = strtools.crop_string_for_ui(frame.name, max_namelen),
+                            file = frame.source and frame.source.path,
+                            lnum = frame.source and frame.line,
+                            data = frame
+                        })
                     if sess_data.cur_frame and frame.id == sess_data.cur_frame.id then
                         initial = #choices
                     end
@@ -566,6 +555,7 @@ local function _process_select_frame_command()
                     prompt = "Select frame",
                     items = choices,
                     initial = initial,
+                     file_preview = true,
                     callback = function(frame)
                         if frame and sess_id == mgr_data.current_session_id and thread_id == sess_data.cur_thread_id then
                             _switch_to_frame(frame, true)
