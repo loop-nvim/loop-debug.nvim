@@ -231,11 +231,12 @@ debuggers.codelldb = {
 -- ==================================================================
 debuggers.gdb = {
     adapter_config = function()
+        local home = os.getenv("HOME")
         return {
             adapter_id = "gdb",
             name = "GDB (via DAP)",
             type = "executable",
-            command = { "gdb", "--interpreter=dap" },
+            command = { "gdb", "--interpreter=dap", "-ix", vim.fs.joinpath(vim.env.HOME or "~", ".gdbinit") },
         }
     end,
 
@@ -248,12 +249,6 @@ debuggers.gdb = {
                 env = nil
             end
         end
-        local setup_commands = {}
-        if task.initCommands then
-            for _, cmd in ipairs(task.initCommands) do
-                table.insert(setup_commands, { text = cmd })
-            end
-        end
         return {
             program = get_task_program(task),
             args = get_task_args(task),
@@ -261,7 +256,6 @@ debuggers.gdb = {
             env = env,
             stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
-            setupCommands = #setup_commands > 0 and setup_commands or nil
         }
     end,
 
