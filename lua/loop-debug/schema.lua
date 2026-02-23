@@ -98,10 +98,6 @@ local schema = {
             type = "string",
         },
 
-        hostName = {
-            type = "string",
-        },
-
         port = {
             oneOf = {
                 { type = "number" },

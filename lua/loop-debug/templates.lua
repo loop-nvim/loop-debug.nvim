@@ -41,12 +41,11 @@ return {
             runInTerminal = true,
             stopOnEntry = false,
             initCommands = {
-                "command script import lldb.formatters.cpp", -- For C++
             }
         }
     },
     {
-        name = "Attach to running process (LLDB)",
+        name = "Attach to running process LLDB",
         task = {
 
             name = "Debug",
@@ -55,7 +54,39 @@ return {
             request = "attach",
             pid = "${select-pid}",
             initCommands = {
-                "command script import lldb.formatters.cpp", -- For C++
+            }
+
+        }
+    },
+    -- ==================================================================
+    -- GDB
+    -- ==================================================================
+    {
+        name = "Debug executable with GDB (launch)",
+        task = {
+
+            name = "Debug",
+            type = "debug",
+            command = "${prompt:Select binary,./,file}",
+            cwd = "${wsdir}",
+            debugger = "gdb",
+            request = "launch",
+            runInTerminal = true,
+            stopOnEntry = false,
+            initCommands = {
+            }
+        }
+    },
+    {
+        name = "Attach to running process with GDB",
+        task = {
+
+            name = "Debug",
+            type = "debug",
+            debugger = "gdb",
+            request = "attach",
+            pid = "${select-pid}",
+            initCommands = {
             }
 
         }
@@ -80,7 +111,7 @@ return {
         }
     },
     {
-        name = "Attach to running process (codelldb)",
+        name = "Attach to running process with CodeLLDB",
         task = {
 
             name = "Debug",
@@ -274,7 +305,7 @@ return {
             type = "debug",
             debugger = "java",
             request = "attach",
-            hostName = "127.0.0.1",
+            host = "127.0.0.1",
             port = 5005,
         }
     },

@@ -227,6 +227,45 @@ debuggers.codelldb = {
 }
 
 -- ==================================================================
+-- C / C++ / Rust (GDB)
+-- ==================================================================
+debuggers.gdb = {
+    adapter_config = function()
+        return {
+            adapter_id = "gdb",
+            name = "GDB (via DAP)",
+            type = "executable",
+            command = { "gdb", "--interpreter=dap" },
+        }
+    end,
+
+    launch_args = function(context)
+        local task = context.task
+        return {
+            program = get_task_program(task),
+            args = get_task_args(task),
+            cwd = _get_task_cwd(context),
+            env = task.env,
+            stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
+            runInTerminal = task.runInTerminal ~= false,
+            setupCommands = task.initCommands and vim.tbl_map(function(cmd)
+                return { text = cmd }
+            end, task.initCommands) or nil,
+        }
+    end,
+
+    attach_args = function(context)
+        local task = context.task
+        return {
+            request = "attach",
+            pid = tonumber(task.pid),
+            program = get_task_program(task) or task.program,
+            cwd = _get_task_cwd(context),
+        }
+    end,
+}
+
+-- ==================================================================
 -- JavaScript / TypeScript (js-debug)
 -- ==================================================================
 
