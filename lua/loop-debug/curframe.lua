@@ -24,8 +24,8 @@ function M.init()
         local normal = vim.api.nvim_get_hl(0, { name = "Normal" })
         local bg = normal.bg or 0x000000
 
-        local reddish = 0xB23434
-        return uitools.blend_colors(bg, reddish, 0.12)
+        local reddish = 0xFF0000
+        return uitools.blend_colors(bg, reddish, 0.05)
     end
 
     local sign_highlight, line_highlight = "LoopDebugCurrentFrame", "LoopDebugCurrentFrameLine"
