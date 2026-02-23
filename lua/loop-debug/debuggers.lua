@@ -241,16 +241,27 @@ debuggers.gdb = {
 
     launch_args = function(context)
         local task = context.task
+        local env = task.env
+        if not env or next(env) == nil then
+            env = vim.fn.environ()
+            if not env or next(env) == nil then
+                env = nil
+            end
+        end
+        local setup_commands = {}
+        if task.initCommands then
+            for _, cmd in ipairs(task.initCommands) do
+                table.insert(setup_commands, { text = cmd })
+            end
+        end
         return {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            env = task.env,
+            env = env,
             stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
-            setupCommands = task.initCommands and vim.tbl_map(function(cmd)
-                return { text = cmd }
-            end, task.initCommands) or nil,
+            setupCommands = #setup_commands > 0 and setup_commands or nil
         }
     end,
 

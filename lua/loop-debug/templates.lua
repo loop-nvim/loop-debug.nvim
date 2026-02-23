@@ -74,6 +74,7 @@ return {
             runInTerminal = true,
             stopOnEntry = false,
             initCommands = {
+                "source ~/.gdbinit"
             }
         }
     },
@@ -87,6 +88,7 @@ return {
             request = "attach",
             pid = "${select-pid}",
             initCommands = {
+                "source ~/.gdbinit"
             }
 
         }
