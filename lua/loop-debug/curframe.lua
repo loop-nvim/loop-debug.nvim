@@ -25,7 +25,7 @@ function M.init()
         local bg = normal.bg or 0x000000
 
         local reddish = 0xB23434
-        return uitools.blind_colors(bg, reddish, 0.12)
+        return uitools.blend_colors(bg, reddish, 0.12)
     end
 
     local sign_highlight, line_highlight = "LoopDebugCurrentFrame", "LoopDebugCurrentFrameLine"
@@ -61,6 +61,7 @@ function M.init()
                 -- highlight line
                 _highlight_group.set_file_extmark(1, frame.source.path, frame.line, 0, {
                     line_hl_group = line_highlight,
+                     hl_mode = "blend"
                 })
             end
         end
