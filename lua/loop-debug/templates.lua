@@ -71,11 +71,7 @@ return {
             cwd = "${wsdir}",
             debugger = "gdb",
             request = "launch",
-            runInTerminal = true,
             stopOnEntry = false,
-            initCommands = {
-                "source ~/.gdbinit"
-            }
         }
     },
     {
@@ -87,10 +83,6 @@ return {
             debugger = "gdb",
             request = "attach",
             pid = "${select-pid}",
-            initCommands = {
-                "source ~/.gdbinit"
-            }
-
         }
     },
     -- ==================================================================

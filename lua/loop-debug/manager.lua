@@ -525,7 +525,6 @@ local function _process_select_frame_command()
             if err or not data then
                 vim.notify("Failed to load call stack: " .. (err or ""))
             else
-                local max_namelen = math.max(2, math.floor(vim.o.columns / 2))
                 ---@type loop.SelectorItem[]
                 local choices = {}
                 local initial
@@ -533,7 +532,7 @@ local function _process_select_frame_command()
                     table.insert(choices,
                         ---@type loop.SelectorItem
                         {
-                            label = strtools.crop_string_for_ui(frame.name, max_namelen),
+                            label = frame.name,
                             file = frame.source and frame.source.path,
                             lnum = frame.source and frame.line,
                             data = frame
@@ -555,7 +554,8 @@ local function _process_select_frame_command()
                     prompt = "Select frame",
                     items = choices,
                     initial = initial,
-                     file_preview = true,
+                    file_preview = true,
+                    list_wrap = false,
                     callback = function(frame)
                         if frame and sess_id == mgr_data.current_session_id and thread_id == sess_data.cur_thread_id then
                             _switch_to_frame(frame, true)
