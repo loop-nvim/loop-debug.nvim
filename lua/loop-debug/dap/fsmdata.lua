@@ -7,7 +7,7 @@ M.trigger =
     --initialize_resp_ok = "initialize_resp_ok",
     initialize_resp_err = "initialize_resp_err",
     initialized = "initialized",
-    start_before_initialized = "start_before_initialized",
+    start = "start",
     configuration_done = "configuration_done",
     launch_resp_ok = "launch_resp_ok",
     launch_resp_error = "launch_resp_error",
@@ -37,7 +37,7 @@ function M.create_fsm_data(handlers)
                 state_handler = handlers.initializing,
                 triggers = {
                     --[M.trigger.initialize_resp_ok] = "starting",
-                    [M.trigger.start_before_initialized] = "starting",
+                    [M.trigger.start] = "starting",
                     [M.trigger.configuration_done] = "starting",
                     [M.trigger.initialize_resp_err] = "disconnecting",
                     [M.trigger.disconnect] = 'disconnecting',

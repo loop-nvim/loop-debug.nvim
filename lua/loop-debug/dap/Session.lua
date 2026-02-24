@@ -724,9 +724,7 @@ function Session:_on_initializing_state()
             self._fsm:trigger(fsmdata.trigger.initialize_resp_err)
             return
         end
-        if self._args.debug_args.launch_post_configure ~= true then
-            self._fsm:trigger(fsmdata.trigger.start_before_initialized)
-        end
+        self._fsm:trigger(fsmdata.trigger.start)
     end
 
     self:_send_initialize(function(success)

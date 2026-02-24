@@ -53,7 +53,6 @@ error('Cannot require a meta file')
 ---@field adapter      loopdebug.AdapterConfig
 ---@field request      "launch" | "attach"
 ---@field request_args  loopdebug.proto.AttachRequestArguments|loopdebug.proto.LaunchRequestArguments|nil
----@field launch_post_configure boolean|nil
 ---@field terminate_debuggee boolean|nil
 
 ---@class loopdebug.session.Args

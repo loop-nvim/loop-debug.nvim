@@ -31,7 +31,6 @@ end
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
----@field launch_post_configure nil|boolean|nil|fun(ctx:loopdebug.TaskContext):boolean
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
 

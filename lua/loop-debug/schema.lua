@@ -22,6 +22,7 @@ local schema = {
         debugger = {
             type = "string",
             description = "Debugger type",
+            ["x-valueSelector"] = "loop-debug.tools.dbgselect.select",
         },
 
         request = {
