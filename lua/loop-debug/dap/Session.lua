@@ -357,6 +357,7 @@ end
 ---@param breakpoint loopdebug.SourceBreakpoint
 function Session:set_source_breakpoint(breakpoint)
     self:remove_breakpoint(breakpoint.id)
+    if not breakpoint.enabled then return end
     local data = self._source_breakpoints
     ---@type loopdebug.session.SourceBPData
     local pbdata = { user_data = breakpoint, verified = false, dap_id = nil }

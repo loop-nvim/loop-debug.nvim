@@ -155,13 +155,9 @@ end
 
 ---@param bp loopdebug.SourceBreakpoint
 function DebugJob:update_breakpoint(bp)
-    if bp.enabled then
-        self._breakpoints[bp.id] = bp
-        for _, data in pairs(self._session_data) do
-            data.session:set_source_breakpoint(bp)
-        end
-    else
-        self:remove_breakpoint(bp)
+    self._breakpoints[bp.id] = bp
+    for _, data in pairs(self._session_data) do
+        data.session:set_source_breakpoint(bp)
     end
 end
 

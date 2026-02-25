@@ -285,6 +285,8 @@ local function _set_all_enabled(value)
         local data = sign.user_data
         data.enabled = value
         _update_sign(sign)
+
+        _trackers:invoke("on_update", _sign_info_to_source_breakpoint(sign))
     end
 end
 
