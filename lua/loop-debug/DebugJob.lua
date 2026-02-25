@@ -141,12 +141,13 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         session:set_source_breakpoint(bp)
     end
 
-    self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
-
     local started, start_err = session:start(session_args)
     if not started then
         return false, "Failed to start debug session, " .. start_err
     end
+    -- report start after session:start to avoid infinite "starting" status on error
+    -- should:start() should not call any callback inside the start() itself 
+    self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
 
     self:_setup_repl(session_id, name, controller, data_providers)
 
