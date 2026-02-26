@@ -78,22 +78,32 @@ function SessionListComp:init()
             self:_refresh()
         end,
         on_session_update = function(id, info)
-            local timer = self._deferred_update_timers[id]
-            if timer and timer:is_active() then
-                timer:stop()
-                timer:close()
+            -- cancel any existing deferred timer for this session
+            local prev_timer = self._deferred_update_timers[id]
+            if prev_timer then
+                prev_timer:stop()
+                prev_timer:close()
+                self._deferred_update_timers[id] = nil
             end
-            self._deferred_update_timers[id] = nil
             local nb_paused = info.nb_paused_threads or 0
             if nb_paused > 0 then
+                -- immediate update for paused sessions
                 self._sessions[id] = info
                 self:_refresh()
             else
-                self._deferred_update_timers[id] = vim.defer_fn(function()
-                        self._sessions[id] = info
-                        self:_refresh()
-                    end,
-                    config.current.anti_flicker_delay)
+                -- schedule deferred update for running sessions
+                local timer
+                timer = vim.defer_fn(function()
+                    -- make sure the timer is still registered (hasn't been canceled)
+                    if self._deferred_update_timers[id] ~= timer then
+                        return
+                    end
+                    self._sessions[id] = info
+                    self:_refresh()
+                    self._deferred_update_timers[id] = nil
+                end, config.current.anti_flicker_delay)
+                -- store timer handle immediately for future cancellation
+                self._deferred_update_timers[id] = timer
             end
         end,
         on_session_removed = function(id)

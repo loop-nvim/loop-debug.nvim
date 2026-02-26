@@ -218,18 +218,28 @@ end
 
 ---@param ctx number
 function Variables:_update_data(ctx)
+    if self._defer_greyout_timer then
+        self._defer_greyout_timer:stop()
+        self._defer_greyout_timer:close()
+        self._defer_greyout_timer = nil
+    end
     --defer to avoid flickering
-    vim.defer_fn(function()
-            local items = self:get_items()
-            for _, item in ipairs(items) do
-                if item.data.greyout_pending then
-                    item.data.greyout = true
-                    item.data.greyout_pending = false
-                end
+    local timer
+    timer = vim.defer_fn(function()
+        if self._defer_greyout_timer ~= timer then
+            return
+        end
+        self._defer_greyout_timer = nil
+        local items = self:get_items()
+        for _, item in ipairs(items) do
+            if item.data.greyout_pending then
+                item.data.greyout = true
+                item.data.greyout_pending = false
             end
-            self:refresh_content()
-        end,
-        config.current.anti_flicker_delay)
+        end
+        self:refresh_content()
+    end, config.current.anti_flicker_delay)
+    self._defer_greyout_timer = timer
 
     local items = self:get_items()
     for _, item in ipairs(items) do item.data.greyout_pending = true end
