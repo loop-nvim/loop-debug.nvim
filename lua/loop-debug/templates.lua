@@ -52,7 +52,7 @@ return {
             type = "debug",
             debugger = "lldb",
             request = "attach",
-            pid = "${select-pid}",
+            processId = "${select-pid}",
             initCommands = {
             }
 
@@ -82,7 +82,7 @@ return {
             type = "debug",
             debugger = "gdb",
             request = "attach",
-            pid = "${select-pid}",
+            processId = "${select-pid}",
         }
     },
     -- ==================================================================
@@ -112,7 +112,7 @@ return {
             type = "debug",
             debugger = "codelldb",
             request = "attach",
-            pid = "${select-pid}",
+            processId = "${select-pid}",
             -- codelldb often requires the program path even for attaching
             -- to resolve symbols correctly
             --program = "${prompt:Select binary,./,file}",
@@ -189,7 +189,6 @@ return {
             cwd = "${wsdir}",
             debugger = "go",
             request = "launch",
-            mode = "debug",
         }
     },
     {
@@ -200,7 +199,6 @@ return {
             type = "debug",
             debugger = "go",
             request = "attach",
-            mode = "local",
             processId = "${select-pid}",
         }
     },
