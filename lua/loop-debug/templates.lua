@@ -4,7 +4,7 @@ return {
     -- Lua
     -- ==================================================================
     {
-        name = "Debug current Lua file (local-lua-debugger-vscode)",
+        name = "lua - run",
         task = {
             name = "Debug",
             type = "debug",
@@ -15,7 +15,7 @@ return {
         }
     },
     {
-        name = "Attach to remote Lua process",
+        name = "lua - attach",
         task = {
             name = "Debug",
             type = "debug",
@@ -25,13 +25,13 @@ return {
             port = 8086,
         }
     },
+
     -- ==================================================================
-    -- C / C++ / Rust / Objective-C (lldb-dap)
+    -- LLDB
     -- ==================================================================
     {
-        name = "Debug executable with LLDB (launch)",
+        name = "lldb - run",
         task = {
-
             name = "Debug",
             type = "debug",
             command = "${prompt:Select binary,./,file}",
@@ -40,31 +40,27 @@ return {
             request = "launch",
             runInTerminal = true,
             stopOnEntry = false,
-            initCommands = {
-            }
+            initCommands = {},
         }
     },
     {
-        name = "Attach to running process LLDB",
+        name = "lldb - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "lldb",
             request = "attach",
             processId = "${select-pid}",
-            initCommands = {
-            }
-
+            initCommands = {},
         }
     },
+
     -- ==================================================================
     -- GDB
     -- ==================================================================
     {
-        name = "Debug executable with GDB (launch)",
+        name = "gdb - run",
         task = {
-
             name = "Debug",
             type = "debug",
             command = "${prompt:Select binary,./,file}",
@@ -75,9 +71,8 @@ return {
         }
     },
     {
-        name = "Attach to running process with GDB",
+        name = "gdb - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "gdb",
@@ -85,13 +80,13 @@ return {
             processId = "${select-pid}",
         }
     },
+
     -- ==================================================================
-    -- C / C++ / Rust / Objective-C (codelldb)
+    -- CodeLLDB
     -- ==================================================================
     {
-        name = "Debug executable with codelldb (launch)",
+        name = "codelldb - run",
         task = {
-
             name = "Debug",
             type = "debug",
             program = "${prompt:Select binary,./,file}",
@@ -100,31 +95,26 @@ return {
             request = "launch",
             runInTerminal = true,
             stopOnEntry = false,
-            -- Enable nicer C++/Rust formatting
             sourceLanguages = { "cpp" },
         }
     },
     {
-        name = "Attach to running process with CodeLLDB",
+        name = "codelldb - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "codelldb",
             request = "attach",
             processId = "${select-pid}",
-            -- codelldb often requires the program path even for attaching
-            -- to resolve symbols correctly
-            --program = "${prompt:Select binary,./,file}",
         }
     },
+
     -- ==================================================================
-    -- Node.js / JavaScript / TypeScript
+    -- Node.js
     -- ==================================================================
     {
-        name = "Debug Node.js script (js-debug)",
+        name = "node - run",
         task = {
-
             name = "Debug",
             type = "debug",
             command = "${file:javascript}",
@@ -136,9 +126,8 @@ return {
         }
     },
     {
-        name = "Attach to Node.js process (js-debug)",
+        name = "node - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "js-debug",
@@ -148,13 +137,13 @@ return {
             restart = true,
         }
     },
+
     -- ==================================================================
     -- Python
     -- ==================================================================
     {
-        name = "Debug Python script (debugpy)",
+        name = "python - run",
         task = {
-
             name = "Debug",
             type = "debug",
             command = "${file:python}",
@@ -165,9 +154,8 @@ return {
         }
     },
     {
-        name = "Attach to Python debug server (debugpy)",
+        name = "python - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "debugpy:remote",
@@ -177,14 +165,14 @@ return {
             justMyCode = false,
         }
     },
+
     -- ==================================================================
     -- Go
     -- ==================================================================
     {
-        name = "Debug Go program (delve)",
+        name = "go - run",
         task = {
-
-            name = "Debug Go program (delve)",
+            name = "Debug",
             type = "debug",
             cwd = "${wsdir}",
             debugger = "go",
@@ -192,9 +180,8 @@ return {
         }
     },
     {
-        name = "Attach to Go process (delve)",
+        name = "go - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "go",
@@ -202,13 +189,13 @@ return {
             processId = "${select-pid}",
         }
     },
+
     -- ==================================================================
-    -- Chrome / Web
+    -- Chrome
     -- ==================================================================
     {
-        name = "Launch Chrome and debug",
+        name = "chrome - run",
         task = {
-
             name = "Launch",
             type = "debug",
             debugger = "chrome",
@@ -220,9 +207,8 @@ return {
         }
     },
     {
-        name = "Attach to running Chrome",
+        name = "chrome - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "chrome",
@@ -231,13 +217,13 @@ return {
             webRoot = "${wsdir}",
         }
     },
+
     -- ==================================================================
     -- Bash
     -- ==================================================================
     {
-        name = "Debug Bash script (bashdb)",
+        name = "bash - run",
         task = {
-
             name = "Debug",
             type = "debug",
             command = "${file}",
@@ -246,13 +232,13 @@ return {
             request = "launch",
         }
     },
+
     -- ==================================================================
-    -- PHP (Xdebug)
+    -- PHP
     -- ==================================================================
     {
-        name = "Listen for Xdebug (PHP)",
+        name = "php - listen",
         task = {
-
             name = "Listen",
             type = "debug",
             debugger = "php",
@@ -261,13 +247,13 @@ return {
             pathMappings = { ["/var/www/html"] = "${wsdir}" },
         }
     },
+
     -- ==================================================================
-    -- C# / .NET
+    -- .NET
     -- ==================================================================
     {
-        name = "Debug .NET DLL (netcoredbg)",
+        name = "netcoredbg - run",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "netcoredbg",
@@ -276,9 +262,8 @@ return {
         }
     },
     {
-        name = "Attach to .NET process",
+        name = "netcoredbg - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "netcoredbg",
@@ -286,13 +271,13 @@ return {
             processId = "${select-pid}",
         }
     },
+
     -- ==================================================================
-    -- Java (jdtls)
+    -- Java
     -- ==================================================================
     {
-        name = "Attach to Java process (JDWP)",
+        name = "java - attach",
         task = {
-
             name = "Debug",
             type = "debug",
             debugger = "java",

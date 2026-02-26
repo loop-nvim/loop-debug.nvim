@@ -22,11 +22,18 @@ function M.get_task_type_provider(ext_data)
 end
 
 function M.get_task_template_provider()
+    local sorted = false
     ---@type loop.TaskTemplateProvider
     return
     {
         get_task_templates = function()
             local templates = require('loop-debug.templates')
+            if not sorted then
+                table.sort(templates, function(a, b)
+                    return a.name < b.name
+                end)
+                sorted = true
+            end
             return templates
         end,
     }
