@@ -47,6 +47,7 @@ error('Cannot require a meta file')
 ---|"debuggee_exit"
 ---|"subsession_request"
 ---|"variable_change"
+---|"dap_log"
 ---@alias loop.session.Tracker fun(session:loopdebug.Session, event:loop.session.TrackerEvent, args:any)
 
 ---@class loopdebug.session.DebugArgs
@@ -58,6 +59,7 @@ error('Cannot require a meta file')
 ---@class loopdebug.session.Args
 ---@field debug_args loopdebug.session.DebugArgs|nil
 ---@field tracker loop.session.Tracker
+---@field enable_dap_log_events boolean
 ---@field exit_handler fun(code:number)
 
 ---@class loopdebug.session.notify.SubsessionRequest

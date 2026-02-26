@@ -231,6 +231,14 @@ function Session:start(args)
         end
     end
 
+    ---@type fun(msg:string,inbound:boolean)?
+    local dap_log_handler
+    if args.enable_dap_log_events then
+        dap_log_handler = function (msg, inbound)
+            args.tracker(self, "dap_log", {msg = msg, inbound = inbound})
+        end
+    end
+
     local start_ok, start_err
     if adapter.type ~= "server" then
         local cmd_and_args = strtools.cmd_to_string_array(adapter.command)
@@ -260,6 +268,7 @@ function Session:start(args)
                 dap_cwd = adapter.cwd,
                 on_stderr = stderr_handler,
                 on_exit = exit_handler,
+                dap_log_handler = dap_log_handler,
             })
         end)
     else

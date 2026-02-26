@@ -39,6 +39,7 @@ local Session          = require('loop-debug.dap.Session')
 ---@field session loopdebug.Session
 ---@field repl_ctrl loop.ReplController?
 ---@field debuggee_output_ctrl loop.OutputBufferController?
+---@field dap_log_ctrl loop.OutputBufferController?
 
 ---@class loop.job.DebugJob
 ---@field new fun(self: loop.job.DebugJob, name:string, page_group:loop.PageGroup) : loop.job.DebugJob
@@ -115,6 +116,7 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         debug_args = debug_args,
         tracker = tracker,
         exit_handler = exit_handler,
+        enable_dap_log_events = true,
     }
 
     -- start new session
@@ -146,7 +148,7 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         return false, "Failed to start debug session, " .. start_err
     end
     -- report start after session:start to avoid infinite "starting" status on error
-    -- should:start() should not call any callback inside the start() itself 
+    -- should:start() should not call any callback inside the start() itself
     self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
 
     self:_setup_repl(session_id, name, controller, data_providers)
@@ -254,6 +256,10 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
     end
     if event == "thread_added" or event == "thread_removed" then
         -- not needed for now
+        return
+    end
+    if event == "dap_log" then
+        self:_add_dap_log(sess_id, session:name(), event_data.msg, event_data.inbound)
         return
     end
     vim.notify("LoopDebug: unhandled dap session event: " .. event)
@@ -406,6 +412,26 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
                 sess_data.debuggee_output_ctrl.add_lines(line)
             end
         end
+    end
+end
+
+---@param sess_id number
+---@param sess_name string
+---@param msg string
+---@param inbound boolean
+function DebugJob:_add_dap_log(sess_id, sess_name, msg, inbound)
+    ---@type loopdebug.DebugJob.SessionData?
+    local sess_data = self._session_data[sess_id]
+    assert(sess_data)
+    if not sess_data.dap_log_ctrl then
+        local page_data = self._page_group.add_page({ type = "output", label = "DAP log" })
+        if page_data then
+            sess_data.dap_log_ctrl = page_data.output_buf
+        end
+    end
+    if sess_data.dap_log_ctrl then
+        local prefix = inbound and "recv: "  or "send: "
+        sess_data.dap_log_ctrl.add_lines(prefix .. msg)
     end
 end
 

@@ -14,6 +14,7 @@ local class = require('loop.tools.class')
 ---@field dap_cwd string|nil
 ---@field dap_host string|nil
 ---@field dap_port number|nil
+---@field dap_log_handler fun(msg:string,inbound:boolean)?
 ---@field on_stderr fun(text: string)
 ---@field on_exit fun(code: number, signal: number)
 
@@ -44,31 +45,32 @@ function BaseSession:start(opts)
 
     ---@type loopdebug.Channel.Opts
     local channel_opts = {
-        dap_mode   = opts.dap_mode,
-        dap_cmd    = opts.dap_cmd,
-        dap_args   = opts.dap_args,
-        dap_env    = opts.dap_env,
-        dap_cwd    = opts.dap_cwd,
-        dap_host   = opts.dap_host,
-        dap_port   = opts.dap_port,
-        on_message = vim.schedule_wrap(
+        dap_mode        = opts.dap_mode,
+        dap_cmd         = opts.dap_cmd,
+        dap_args        = opts.dap_args,
+        dap_env         = opts.dap_env,
+        dap_cwd         = opts.dap_cwd,
+        dap_host        = opts.dap_host,
+        dap_port        = opts.dap_port,
+        on_message      = vim.schedule_wrap(
         -- schedule to avoid processing in the fast event context
             function(msg)
                 self:_on_message(msg)
             end),
-        on_stderr  = vim.schedule_wrap(
+        on_stderr       = vim.schedule_wrap(
         -- schedule to avoid processing in the fast event context
             function(text)
                 vim.schedule(function()
                     opts.on_stderr(text)
                 end)
             end),
-        on_exit    = function(code, signal)
+        on_exit         = function(code, signal)
             vim.schedule(function() self:_on_exit() end)
-            vim.schedule(function ()
+            vim.schedule(function()
                 opts.on_exit(code, signal)
             end)
         end,
+        dap_log_handler = opts.dap_log_handler,
     }
 
     self.channel = Channel:new(self._name, channel_opts)

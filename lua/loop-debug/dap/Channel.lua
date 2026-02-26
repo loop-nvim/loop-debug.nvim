@@ -16,34 +16,22 @@ local class = require('loop.tools.class')
 ---@field on_message fun(msg:string)
 ---@field on_stderr fun(text: string)
 ---@field on_exit fun(code: number, signal: number)
-
+---@field dap_log_handler fun(msg:string,inbound:boolean)?
 
 ---@class loopdebug.Channel
 ---@field new fun(self: loopdebug.Channel, name:string, opts:loopdebug.Channel.Opts): loopdebug.Channel
 ---@field transport loopdebug.Process|loopdebug.Tcp
+---@field _on_dap_log fun(msg:string,inbound:boolean)?
 local Channel = class()
 
 ---@diagnostic disable-next-line: undefined-field
-
-local msg_log_enabled = (vim.env.NVIM_LOOP_PLUGIN_ENBALE_DAP_LOGS == "1")
-local msg_log_file = nil
-
-local function log_msg_content(line)
-    if msg_log_enabled then
-        if not msg_log_file then
-            local msg_log_file_path = vim.fs.joinpath(vim.fn.stdpath("log"), "loop-debug.dap.log")
-            msg_log_file = assert(io.open(msg_log_file_path, "w"))
-        end
-        msg_log_file:write(line)
-        msg_log_file:flush()
-    end
-end
 
 ---@param opts loopdebug.Channel.Opts
 function Channel:init(name, opts)
     self.name = name
     self.on_message = opts.on_message -- function(msg: table) called for non-response messages
     self.on_stderr = opts.on_stderr
+    self._on_dap_log = opts.dap_log_handler
     assert(type(self.on_message) == "function")
     assert(type(self.on_stderr) == "function")
     if opts.dap_mode == nil or opts.dap_mode == "executable" then
@@ -119,14 +107,19 @@ function Channel:_create_tcp(name, opts)
     })
 end
 
+---@param msg string
 function Channel:send_message(msg)
     assert(msg)
-    if msg_log_enabled then
-        log_msg_content("\n==[" .. self.name .. "]==\nSending msg: " .. strtools.to_pretty_str(msg))
-    end
 
     local body, encode_err = json.encode(msg)
     assert(body, encode_err)
+
+    if self._on_dap_log then
+        vim.schedule(function()
+            self._on_dap_log(body, false)
+        end)
+    end
+
     local header = "Content-Length: " .. #body .. "\r\n\r\n"
     local packet = header .. body
 
@@ -173,14 +166,16 @@ function Channel:_on_data(buffer, data)
         -- 6. Remove processed message from buffer
         buffer.data = buffer.data:sub(body_end + 1)
 
+        if self._on_dap_log then
+            vim.schedule(function()
+                self._on_dap_log(body, true)
+            end)
+        end
+
         -- 7. Decode the JSON body
         local message, pos, err = json.decode(body)
         if not message or err then
             error("JSON decode error at position " .. tostring(pos) .. ": " .. err)
-        end
-
-        if msg_log_enabled then
-            log_msg_content("\n==[" .. self.name .. "]==\nReceived msg: " .. strtools.to_pretty_str(message) .. '\n\n')
         end
 
         -- 8. Dispatch the message (in the nvim main thread)
