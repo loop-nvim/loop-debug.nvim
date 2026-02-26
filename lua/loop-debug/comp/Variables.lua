@@ -56,48 +56,47 @@ local function _preview_string(str, max_len)
 end
 
 ---@param expr string
----@return boolean
+---@return number
 local function _add_expr(expr)
-    if not persistence.is_ws_open() then return false end
+    if not persistence.is_ws_open() then return 0 end
     local data = persistence.get_config("expr") or {}
     ---@cast data string[]
-    for _, v in ipairs(data) do if v == expr then return false end end
     table.insert(data, expr)
     persistence.set_config("expr", data)
-    return true
+    return #data
 end
 
 ---@param old string
 ---@param new string
----@return boolean
+---@return number
 local function _reset_expr(old, new)
     local data = persistence.get_config("expr")
-    if not data then return false end
+    if not data then return 0 end
     ---@cast data string[]
     for i, v in ipairs(data) do
         if v == old then
             data[i] = new
             persistence.set_config("expr", data)
-            return true
+            return i
         end
     end
-    return false
+    return 0
 end
 
 ---@param expr string
----@return boolean
+---@return number
 local function _remove_expr(expr)
     local data = persistence.get_config("expr")
-    if not data then return false end
+    if not data then return 0 end
     ---@cast data string[]
     for i, v in ipairs(data) do
         if v == expr then
             table.remove(data, i)
             persistence.set_config("expr", data)
-            return true
+            return i
         end
     end
-    return false
+    return 0
 end
 
 ---@type table<string, string>
@@ -133,7 +132,7 @@ local function _variable_node_formatter(id, data)
 
     -- scope label (single segment)
     if data.scopelabel then
-        table.insert(text_chunks, { data.scopelabel, base_hl or "Directory" })
+        table.insert(text_chunks, { data.scopelabel, "Directory" })
         return text_chunks, virt_chunks
     end
 
@@ -214,6 +213,8 @@ function Variables:init()
     self._persistence_tracker_ref = persistence.add_tracker({
         on_ws_load = function() self:_update_data(self._query_context) end
     })
+
+    self:_load_expressions(self._query_context)
 end
 
 ---@param ctx number
@@ -337,46 +338,48 @@ end
 
 ---@param context number
 function Variables:_load_expressions(context)
-    local root_id = self._expr_root_id
-    local root_expanded = self._layout_cache[root_id]
-    if root_expanded == nil then root_expanded = true end
-
-    self:upsert_item(nil,
-        { id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Expressions" } })
-
     if not persistence.is_ws_open() then return end
     local list = persistence.get_config("expr") or {}
-
-    for idx, expr in ipairs(list) do
-        local item_id = root_id .. "/" .. tostring(idx)
-        self:_load_expr_value(context, root_id, expr, item_id)
+    for idx, _ in ipairs(list) do
+        self:_load_expr_value(context, idx)
     end
 end
 
 ---@param context number
----@param expr string
----@param item_id any
-function Variables:_load_expr_value(context, parent_id, expr, item_id)
-    local path = parent_id .. "/" .. expr
+---@param index number
+function Variables:_load_expr_value(context, index)
+    if not persistence.is_ws_open() then return end
+    local list = persistence.get_config("expr") or {}
+    local expr = list[index]
+    if not expr then return end
 
-    -- Check if we already have this item to preserve existing data during greyout
+    local root_id = self._expr_root_id
+    local root_expanded = self._layout_cache[root_id]
+    if root_expanded == nil then root_expanded = true end
+
+    if not self:get_item(root_id) then
+        self:upsert_item(nil,
+            {
+                id = root_id,
+                expanded = root_expanded,
+                data = { path = root_id, scopelabel = "Expressions" }
+            })
+    end
+
+    local item_id = root_id .. "/" .. tostring(index)
+    local path = item_id
     local existing = self:get_item(item_id)
-
     ---@type loopdebug.comp.Variables.ItemDef
     local var_item = {
         id = item_id,
         expanded = self._layout_cache[path],
-        data = existing and existing.data or
-            { path = path, is_expr = true, name = expr, is_na = true, value = "not available" }
+        data = existing and existing.data or { path = path, is_expr = true, is_na = true, value = "not available" }
     }
-
-    -- Ensure the name is correct if it was renamed
     var_item.data.name = expr
 
-    self:upsert_item(parent_id, var_item)
-
     local ds = self._current_data_source
-    if not ds or not ds.frame or not ds.data_providers then
+    if not expr or not ds or not ds.frame or not ds.data_providers then
+        self:upsert_item(root_id, var_item)
         return
     end
 
@@ -384,6 +387,7 @@ function Variables:_load_expr_value(context, parent_id, expr, item_id)
         expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
         if self._query_context ~= context then return end
+
         if err or not data then
             var_item.data.value = "not available"
             var_item.data.is_na = true
@@ -401,7 +405,7 @@ function Variables:_load_expr_value(context, parent_id, expr, item_id)
                 end
             end
         end
-        self:upsert_item(parent_id, var_item)
+        self:upsert_item(root_id, var_item)
     end)
 end
 
@@ -436,21 +440,27 @@ end
 function Variables:link_to_buffer(comp)
     ItemTreeComp.link_to_buffer(self, comp)
 
-    ---@param item loop.comp.ItemTree.Item|nil
-    local function add_or_edit_watch(item)
-        floatwin.input_at_cursor({
-                default_text = item and item.data.name or "" },
+    local function add_watch_expr()
+        floatwin.input_at_cursor({},
             function(expr)
                 if not expr or expr == "" then return end
-                if not item then
-                    if _add_expr(expr) then
-                        -- ONLY reload watches
-                        self:_load_expressions(self._query_context)
-                    end
-                elseif expr ~= item.data.name then
-                    if _reset_expr(item.data.name, expr) then
-                        -- ONLY reload watches
-                        self:_load_expressions(self._query_context)
+                local idx = _add_expr(expr)
+                if idx > 0 then
+                    self:_load_expr_value(self._query_context, idx)
+                end
+            end
+        )
+    end
+
+    ---@param item loop.comp.ItemTree.Item
+    local function edit_watch_expr(item)
+        floatwin.input_at_cursor({ default_text = item.data.name or "" },
+            function(expr)
+                if not expr or expr == "" then return end
+                if expr ~= item.data.name then
+                    local idx = _reset_expr(item.data.name, expr)
+                    if idx > 0 then
+                        self:_load_expr_value(self._query_context, idx)
                     end
                 end
             end
@@ -507,14 +517,14 @@ function Variables:link_to_buffer(comp)
         )
     end
 
-    comp.add_keymap("i", { desc = "Add Expression", callback = function() add_or_edit_watch() end })
+    comp.add_keymap("i", { desc = "Add Expression", callback = function() add_watch_expr() end })
     comp.add_keymap("c", {
         desc = "Edit Expression/Variable",
         callback = function()
             local cur = self:get_cur_item()
             if cur then
                 if cur.data.is_expr then
-                    add_or_edit_watch(cur)
+                    edit_watch_expr(cur)
                 else
                     edit_variable(cur)
                 end
@@ -526,10 +536,9 @@ function Variables:link_to_buffer(comp)
         callback = function()
             local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
-                _remove_expr(cur.data.name)
-                self:remove_item(cur.id)
-                -- ONLY reload watches to sync indices
-                self:_load_expressions(self._query_context)
+                if _remove_expr(cur.data.name) > 0 then
+                    self:remove_item(cur.id)
+                end
             end
         end
     })
