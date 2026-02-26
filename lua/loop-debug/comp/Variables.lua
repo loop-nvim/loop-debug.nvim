@@ -26,6 +26,10 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field data_providers loopdebug.session.DataProviders
 ---@field frame loopdebug.proto.StackFrame
 
+---@class loopdebug.comp.Vars.Expression
+---@field id number
+---@field expr string
+
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.Variables): loopdebug.comp.Variables
 local Variables    = class(ItemTreeComp)
@@ -56,47 +60,57 @@ local function _preview_string(str, max_len)
 end
 
 ---@param expr string
----@return number
+---@return loopdebug.comp.Vars.Expression?
 local function _add_expr(expr)
-    if not persistence.is_ws_open() then return 0 end
+    if not persistence.is_ws_open() then return end
     local data = persistence.get_config("expr") or {}
-    ---@cast data string[]
-    table.insert(data, expr)
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    local max_id = 1
+    for _, v in ipairs(data) do
+        max_id = math.max(max_id, v.id)
+    end
+    local new_id = max_id + 1
+    ---@type loopdebug.comp.Vars.Expression
+    local obj = {
+        id = new_id,
+        expr = expr
+    }
+    table.insert(data, obj)
     persistence.set_config("expr", data)
-    return #data
+    return obj
 end
 
+---@param id number
 ---@param old string
 ---@param new string
----@return number
-local function _reset_expr(old, new)
+---@return loopdebug.comp.Vars.Expression?
+local function _reset_expr(id, old, new)
     local data = persistence.get_config("expr")
-    if not data then return 0 end
-    ---@cast data string[]
-    for i, v in ipairs(data) do
-        if v == old then
-            data[i] = new
+    if not data then return end
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    for _, v in ipairs(data) do
+        if v.id == id then
+            v.expr = new
             persistence.set_config("expr", data)
-            return i
+            return v
         end
     end
-    return 0
 end
 
----@param expr string
----@return number
-local function _remove_expr(expr)
+---@param id number
+---@return boolean
+local function _remove_expr(id)
     local data = persistence.get_config("expr")
-    if not data then return 0 end
-    ---@cast data string[]
+    if not data then return false end
+    ---@cast data loopdebug.comp.Vars.Expression[]
     for i, v in ipairs(data) do
-        if v == expr then
+        if v.id == id then
             table.remove(data, i)
             persistence.set_config("expr", data)
-            return i
+            return true
         end
     end
-    return 0
+    return false
 end
 
 ---@type table<string, string>
@@ -338,25 +352,9 @@ end
 
 ---@param context number
 function Variables:_load_expressions(context)
-    if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("expr") or {}
-    for idx, _ in ipairs(list) do
-        self:_load_expr_value(context, idx)
-    end
-end
-
----@param context number
----@param index number
-function Variables:_load_expr_value(context, index)
-    if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("expr") or {}
-    local expr = list[index]
-    if not expr then return end
-
     local root_id = self._expr_root_id
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
-
     if not self:get_item(root_id) then
         self:upsert_item(nil,
             {
@@ -366,15 +364,33 @@ function Variables:_load_expr_value(context, index)
             })
     end
 
-    local item_id = root_id .. "/" .. tostring(index)
+    if not persistence.is_ws_open() then return end
+    local list = persistence.get_config("expr") or {}
+    for _, v in ipairs(list) do
+        self:_load_expr_value(context, v)
+    end
+end
+
+---@param context number
+---@param expr_obj loopdebug.comp.Vars.Expression
+function Variables:_load_expr_value(context, expr_obj)
+    if not persistence.is_ws_open() then return end
+    assert(expr_obj.id and expr_obj.expr)
+
+    local root_id = self._expr_root_id
+    if not self:get_item(root_id) then return end
+
+    local item_id = root_id .. "/" .. tostring(expr_obj.id)
     local path = item_id
     local existing = self:get_item(item_id)
     ---@type loopdebug.comp.Variables.ItemDef
     local var_item = {
         id = item_id,
         expanded = self._layout_cache[path],
-        data = existing and existing.data or { path = path, is_expr = true, is_na = true, value = "not available" }
+        data = existing and existing.data or
+        { path = path, is_expr = true, expr_id = expr_obj.id, is_na = true, value = "not available" }
     }
+    local expr = expr_obj.expr
     var_item.data.name = expr
 
     local ds = self._current_data_source
@@ -444,9 +460,9 @@ function Variables:link_to_buffer(comp)
         floatwin.input_at_cursor({},
             function(expr)
                 if not expr or expr == "" then return end
-                local idx = _add_expr(expr)
-                if idx > 0 then
-                    self:_load_expr_value(self._query_context, idx)
+                local expr_obj = _add_expr(expr)
+                if expr_obj then
+                    self:_load_expr_value(self._query_context, expr_obj)
                 end
             end
         )
@@ -458,9 +474,9 @@ function Variables:link_to_buffer(comp)
             function(expr)
                 if not expr or expr == "" then return end
                 if expr ~= item.data.name then
-                    local idx = _reset_expr(item.data.name, expr)
-                    if idx > 0 then
-                        self:_load_expr_value(self._query_context, idx)
+                    local expr_obj = _reset_expr(item.data.expr_id, item.data.name, expr)
+                    if expr_obj then
+                        self:_load_expr_value(self._query_context, expr_obj)
                     end
                 end
             end
@@ -536,7 +552,7 @@ function Variables:link_to_buffer(comp)
         callback = function()
             local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
-                if _remove_expr(cur.data.name) > 0 then
+                if _remove_expr(cur.data.expr_id) then
                     self:remove_item(cur.id)
                 end
             end

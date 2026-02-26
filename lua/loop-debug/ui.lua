@@ -253,6 +253,7 @@ function M.show()
     for i, def in ipairs(_window_defs) do
         local winid = windows[i]
         vim.api.nvim_set_option_value('winfixwidth', true, { scope = 'local', win = winid })
+        vim.api.nvim_set_option_value('winfixheight', true, { scope = 'local', win = winid })
     end
 
     if vim.api.nvim_win_is_valid(original_win) then
