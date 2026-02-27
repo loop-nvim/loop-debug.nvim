@@ -95,3 +95,4 @@ error('Cannot require a meta file')
 ---@class loopdebug.session.notify.ThreadsEventScope
 ---@field thread_id number
 ---@field all_thread boolean
+---@field reason string?

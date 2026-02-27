@@ -381,9 +381,18 @@ end
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
 function M.on_session_thread_pause(sess_id, sess_name, event_data)
-    if not _manager_data.session_data[sess_id] then return end
-    -- Switch session handles the context update, thread syncing, and reporting
-    _switch_to_session(sess_id, event_data)
+    if daptools.is_spurious_stop(event_data.reason) then
+        local mgr_data = _manager_data
+        local sess_data = mgr_data.session_data[sess_id]
+        if not sess_data then return end
+        _increment_context("pause")
+        sess_data.paused_threads[0] = true
+        _switch_to_thread(sess_id, nil, true)
+        _report_session_update(sess_id)
+    else
+        -- Switch session handles the context update, thread syncing, and reporting
+        _switch_to_session(sess_id, event_data)
+    end
 end
 
 ---@param sess_id number

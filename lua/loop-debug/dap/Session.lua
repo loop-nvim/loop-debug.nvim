@@ -234,8 +234,8 @@ function Session:start(args)
     ---@type fun(msg:string,inbound:boolean)?
     local dap_log_handler
     if args.enable_dap_log_events then
-        dap_log_handler = function (msg, inbound)
-            args.tracker(self, "dap_log", {msg = msg, inbound = inbound})
+        dap_log_handler = function(msg, inbound)
+            args.tracker(self, "dap_log", { msg = msg, inbound = inbound })
         end
     end
 
@@ -607,6 +607,7 @@ function Session:_on_stopped_event(event)
     local data = {
         thread_id = event.threadId,
         all_thread = event.allThreadsStopped,
+        reason = event.reason,
     }
     self:_notify_tracker("threads_paused", data)
 end
