@@ -207,42 +207,65 @@ function Variables:_add_expr(expr)
     end
     local new_id = max_id + 1
     ---@type loopdebug.comp.Vars.Expression
-    local obj = {
+    local expr_obj = {
         id = new_id,
         expr = expr,
         disabled = false
     }
-    table.insert(data, obj)
-    return obj
+    table.insert(data, expr_obj)
+
+    local root_id = self._expr_root_id
+    local item_id = root_id .. "/" .. tostring(expr_obj.id)
+    local existing_item = self:get_item(item_id)
+    if not existing_item then
+        local item_data = {
+            name = expr_obj.expr,
+            path = item_id,
+            is_expr = true,
+            expr_id = expr_obj.id,
+            is_na = true,
+            value = "not available"
+        }
+        ---@type loopdebug.comp.Variables.ItemDef
+        local item_def = {
+            id = item_id,
+            expanded = self._layout_cache[item_data.path],
+            data = item_data
+        }
+        self:add_item(root_id, item_def)
+    end
+
+    self:_load_expr_value(self._query_context, expr_obj)
 end
 
 ---@param id number
 ---@param old string
 ---@param new string
----@return loopdebug.comp.Vars.Expression?
 function Variables:_reset_expr(id, old, new)
     local data = self._expressions
     ---@cast data loopdebug.comp.Vars.Expression[]
-    for _, v in ipairs(data) do
-        if v.id == id then
-            v.expr = new
-            return v
+    for _, expr_obj in ipairs(data) do
+        if expr_obj.id == id then
+            expr_obj.expr = new
+            self:_load_expr_value(self._query_context, expr_obj)
+            return
         end
     end
 end
 
 ---@param id number
----@return boolean
 function Variables:_remove_expr(id)
     local data = self._expressions
     ---@cast data loopdebug.comp.Vars.Expression[]
-    for i, v in ipairs(data) do
-        if v.id == id then
+    for i, expr_obj in ipairs(data) do
+        if expr_obj.id == id then
             table.remove(data, i)
-            return true
+            local root_id = self._expr_root_id
+            local item_id = root_id .. "/" .. tostring(expr_obj.id)
+            self:remove_item(item_id)
+            return
         end
     end
-    return false
 end
 
 ---@param ctx number
@@ -448,7 +471,11 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
     local expr = expr_obj.expr
     local existing_item = self:get_item(item_id)
     if not existing_item then return end
+
+    ---@type loopdebug.comp.Variables.ItemData
     local item_data = existing_item.data
+
+    item_data.name =  expr_obj.expr
 
     local ds = self._current_data_source
     if not expr or not ds or not ds.frame or not ds.data_providers then
@@ -539,10 +566,7 @@ function Variables:link_to_buffer(comp)
         floatwin.input_at_cursor({},
             function(expr)
                 if not expr or expr == "" then return end
-                local expr_obj = self:_add_expr(expr)
-                if expr_obj then
-                    self:_load_expr_value(self._query_context, expr_obj)
-                end
+                self:_add_expr(expr)
             end
         )
     end
@@ -553,10 +577,7 @@ function Variables:link_to_buffer(comp)
             function(expr)
                 if not expr or expr == "" then return end
                 if expr ~= item.data.name then
-                    local expr_obj = self:_reset_expr(item.data.expr_id, item.data.name, expr)
-                    if expr_obj then
-                        self:_load_expr_value(self._query_context, expr_obj)
-                    end
+                    self:_reset_expr(item.data.expr_id, item.data.name, expr)
                 end
             end
         )
@@ -631,9 +652,7 @@ function Variables:link_to_buffer(comp)
         callback = function()
             local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
-                if self:_remove_expr(cur.data.expr_id) then
-                    self:remove_item(cur.id)
-                end
+                self:_remove_expr(cur.data.expr_id)
             end
         end
     })
