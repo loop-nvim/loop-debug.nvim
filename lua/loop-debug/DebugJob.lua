@@ -77,6 +77,7 @@ end
 ---@class loop.DebugJob.StartArgs
 ---@field name string
 ---@field debug_args loopdebug.session.DebugArgs
+---@field enable_dap_log boolean
 
 ---Starts a new terminal job.
 ---@param args loop.DebugJob.StartArgs
@@ -85,6 +86,7 @@ end
 function DebugJob:start(args, tracker)
     assert(#self._session_data == 0 and not self._tracker, "already started")
     self._tracker = tracker
+    self._enable_dap_log = args.enable_dap_log
     local ok, err = self:_add_new_session(args.name, args.debug_args)
     return ok, err
 end
@@ -116,7 +118,7 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         debug_args = debug_args,
         tracker = tracker,
         exit_handler = exit_handler,
-        enable_dap_log_events = true,
+        enable_dap_log_events = self._enable_dap_log,
     }
 
     -- start new session
@@ -422,7 +424,7 @@ end
 function DebugJob:_add_dap_log(sess_id, sess_name, msg, inbound)
     ---@type loopdebug.DebugJob.SessionData?
     local sess_data = self._session_data[sess_id]
-    assert(sess_data)
+    if not sess_data then return end
     if not sess_data.dap_log_ctrl then
         local page_data = self._page_group.add_page({ type = "output", label = "DAP log" })
         if page_data then

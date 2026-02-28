@@ -286,6 +286,7 @@ function Session:start(args)
                 dap_port = adapter.port,
                 on_stderr = stderr_handler,
                 on_exit = exit_handler,
+                dap_log_handler = dap_log_handler,
             })
         end)
     end

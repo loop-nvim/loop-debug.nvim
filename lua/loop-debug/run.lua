@@ -171,6 +171,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     ---@type loop.DebugJob.StartArgs
     local start_args = {
         name = task.name,
+        enable_dap_log = (config.current.enable_dap_log ~= false),
         debug_args = {
             adapter = adapter_config,
             request = task.request,

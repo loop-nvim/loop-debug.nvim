@@ -26,6 +26,7 @@
 ---@field sign_priority? loop-debug.Config.SignPriority
 ---@field symbols? loop-debug.Config.Symbols
 ---@field debuggers? table<string,loopdebug.Config.Debugger>
+---@field enable_dap_log boolean?
 
 local M = {}
 
