@@ -30,7 +30,6 @@ local debugevents  = require('loop-debug.debugevents')
 ---@class loopdebug.comp.Vars.Expression
 ---@field id number
 ---@field expr string
----@field disabled boolean
 
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.Variables): loopdebug.comp.Variables
@@ -133,6 +132,8 @@ function Variables:init()
 
     ---@type loopdebug.comp.Vars.Expression[]
     self._expressions = persistence.get_config("expr") or {}
+    ---@type table<string,boolean>
+    self._disabled_expressions = {}
 
     self._query_context = 0
     self._spurious_pause_counter = 0
@@ -181,15 +182,12 @@ function Variables:init()
     self._persistence_tracker_ref = persistence.add_tracker({
         on_ws_load = function()
             self._expressions = persistence.get_config("expr") or {}
+            self._disabled_expressions = {}
             self:_update_data(self._query_context)
         end,
         on_ws_will_save = function()
             ---@type loopdebug.comp.Vars.Expression[]
-            local data = vim.deepcopy(self._expressions)
-            for _, exrobj in ipairs(data) do
-                exrobj.disabled = nil
-            end
-            persistence.set_config("expr", data)
+            persistence.set_config("expr", self._expressions)
         end,
     })
 
@@ -210,7 +208,6 @@ function Variables:_add_expr(expr)
     local expr_obj = {
         id = new_id,
         expr = expr,
-        disabled = false
     }
     table.insert(data, expr_obj)
 
@@ -475,14 +472,14 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
     ---@type loopdebug.comp.Variables.ItemData
     local item_data = existing_item.data
 
-    item_data.name =  expr_obj.expr
+    item_data.name = expr_obj.expr
 
     local ds = self._current_data_source
     if not expr or not ds or not ds.frame or not ds.data_providers then
         return
     end
 
-    if expr_obj.disabled then
+    if self._disabled_expressions[expr_obj.expr] then
         item_data.is_na = true
         item_data.value = "disabled"
         return
@@ -493,7 +490,7 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
         expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
         if spurious_pause_counter ~= self._spurious_pause_counter then
-            expr_obj.disabled = true
+            self._disabled_expressions[expr_obj.expr] = true
         end
         if self._query_context ~= context then return end
         if not self:have_item(item_id) then return end
