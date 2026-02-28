@@ -30,6 +30,7 @@ local debugevents  = require('loop-debug.debugevents')
 ---@class loopdebug.comp.Vars.Expression
 ---@field id number
 ---@field expr string
+---@field disabled boolean
 
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.Variables): loopdebug.comp.Variables
@@ -58,60 +59,6 @@ local function _preview_string(str, max_len)
     preview = preview:sub(1, max_len)
     preview = preview:match("^%s*(.-)%s*$") -- trim
     return preview .. "…", true
-end
-
----@param expr string
----@return loopdebug.comp.Vars.Expression?
-local function _add_expr(expr)
-    if not persistence.is_ws_open() then return end
-    local data = persistence.get_config("expr") or {}
-    ---@cast data loopdebug.comp.Vars.Expression[]
-    local max_id = 1
-    for _, v in ipairs(data) do
-        max_id = math.max(max_id, v.id)
-    end
-    local new_id = max_id + 1
-    ---@type loopdebug.comp.Vars.Expression
-    local obj = {
-        id = new_id,
-        expr = expr
-    }
-    table.insert(data, obj)
-    persistence.set_config("expr", data)
-    return obj
-end
-
----@param id number
----@param old string
----@param new string
----@return loopdebug.comp.Vars.Expression?
-local function _reset_expr(id, old, new)
-    local data = persistence.get_config("expr")
-    if not data then return end
-    ---@cast data loopdebug.comp.Vars.Expression[]
-    for _, v in ipairs(data) do
-        if v.id == id then
-            v.expr = new
-            persistence.set_config("expr", data)
-            return v
-        end
-    end
-end
-
----@param id number
----@return boolean
-local function _remove_expr(id)
-    local data = persistence.get_config("expr")
-    if not data then return false end
-    ---@cast data loopdebug.comp.Vars.Expression[]
-    for i, v in ipairs(data) do
-        if v.id == id then
-            table.remove(data, i)
-            persistence.set_config("expr", data)
-            return true
-        end
-    end
-    return false
 end
 
 ---@type table<string, string>
@@ -184,7 +131,12 @@ function Variables:init()
         render_delay_ms = 200,
     })
 
+    ---@type loopdebug.comp.Vars.Expression[]
+    self._expressions = {}
+
     self._query_context = 0
+    self._spurious_pause_counter = 0
+
     ---@type loopdebug.events.CurrentViewUpdate|nil
     self._current_data_source = nil
     ---@type table<string, boolean>
@@ -220,16 +172,77 @@ function Variables:init()
         on_view_udpate = function(view)
             self._current_data_source = view
             self._query_context = self._query_context + 1
+            if view.spurious_pause then self._spurious_pause_counter = self._spurious_pause_counter + 1 end
             self:_update_data(self._query_context)
         end
     })
 
     ---@type loop.TrackerRef?
     self._persistence_tracker_ref = persistence.add_tracker({
-        on_ws_load = function() self:_update_data(self._query_context) end
+        on_ws_load = function()
+            self._expressions = persistence.get_config("expr") or {}
+            self:_update_data(self._query_context)
+        end,
+        on_ws_will_save = function()
+            ---@type loopdebug.comp.Vars.Expression[]
+            local data = vim.deepcopy(self._expressions)
+            for _, exrobj in ipairs(data) do
+                exrobj.disabled = nil
+            end
+            persistence.set_config("expr", data)
+        end,
     })
 
     self:_load_expressions(self._query_context)
+end
+
+---@param expr string
+---@return loopdebug.comp.Vars.Expression?
+function Variables:_add_expr(expr)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    local max_id = 1
+    for _, v in ipairs(data) do
+        max_id = math.max(max_id, v.id)
+    end
+    local new_id = max_id + 1
+    ---@type loopdebug.comp.Vars.Expression
+    local obj = {
+        id = new_id,
+        expr = expr,
+        disabled = false
+    }
+    table.insert(data, obj)
+    return obj
+end
+
+---@param id number
+---@param old string
+---@param new string
+---@return loopdebug.comp.Vars.Expression?
+function Variables:_reset_expr(id, old, new)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    for _, v in ipairs(data) do
+        if v.id == id then
+            v.expr = new
+            return v
+        end
+    end
+end
+
+---@param id number
+---@return boolean
+function Variables:_remove_expr(id)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    for i, v in ipairs(data) do
+        if v.id == id then
+            table.remove(data, i)
+            return true
+        end
+    end
+    return false
 end
 
 ---@param ctx number
@@ -365,18 +378,42 @@ function Variables:_load_expressions(context)
             })
     end
 
-    if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("expr") or {}
-    for _, v in ipairs(list) do
-        self:_load_expr_value(context, v)
+    if not persistence.is_ws_open() then
+        self:remove_children(root_id)
+        return
     end
+
+    local exr_names = {}
+    for _, exrobj in ipairs(self._expressions) do
+        exr_names[exrobj.expr] = true
+    end
+
+    local children = self:get_children(self._expr_root_id)
+    for _, child in ipairs(children) do
+        if not exr_names[child.data.name] then
+            self:remove_item(child.id)
+        end
+    end
+    local list = vim.fn.copy(persistence.get_config("expr") or {})
+    local load_next = function()
+        if #list == 0 then return end
+        local exprobj = table.remove(list, 1)
+        self:_load_expr_value(context, exprobj, function()
+
+        end)
+    end
+    load_next()
 end
 
 ---@param context number
 ---@param expr_obj loopdebug.comp.Vars.Expression
-function Variables:_load_expr_value(context, expr_obj)
-    if not persistence.is_ws_open() then return end
+---@param on_complete fun()?
+function Variables:_load_expr_value(context, expr_obj, on_complete)
     assert(expr_obj.id and expr_obj.expr)
+
+
+    if not persistence.is_ws_open() then return end
+    if self._query_context ~= context then return end
 
     local root_id = self._expr_root_id
     if not self:get_item(root_id) then return end
@@ -396,8 +433,7 @@ function Variables:_load_expr_value(context, expr_obj)
             is_expr = true,
             expr_id = expr_obj.id,
             is_na = true,
-            value =
-            "not available"
+            value = "not available"
         }
         ---@type loopdebug.comp.Variables.ItemDef
         local item_def = {
@@ -415,10 +451,21 @@ function Variables:_load_expr_value(context, expr_obj)
         return
     end
 
+    if expr_obj.disabled then
+        item_data.is_na = true
+        item_data.value = "disabled"
+        return
+    end
+
+    local spurious_pause_counter = self._spurious_pause_counter
     ds.data_providers.evaluate_provider({
         expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
+        if spurious_pause_counter ~= self._spurious_pause_counter then
+            expr_obj.disabled = true
+        end
         if self._query_context ~= context then return end
+        if not self:have_item(item_id) then return end
         local children_callback
         if err or not data then
             item_data.value = "not available"
@@ -444,6 +491,7 @@ function Variables:_load_expr_value(context, expr_obj)
             children_callback = children_callback
         }
         self:update_item(update_def)
+        if on_complete then on_complete() end
     end)
 end
 

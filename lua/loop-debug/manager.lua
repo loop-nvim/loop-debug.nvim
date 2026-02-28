@@ -23,6 +23,7 @@ local M             = {}
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
 ---@field all_threads_paused boolean
+---@field spurious_pause boolean
 ---@field paused_threads table<number, boolean> Set of paused thread IDs
 ---@field cur_thread_id number|nil Currently selected thread
 ---@field cur_frame loopdebug.proto.StackFrame|nil Currently selected stack frame
@@ -125,7 +126,8 @@ local function _report_current_view(trigger)
         session_name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
         thread_id = sess_data.cur_thread_id,
-        frame = sess_data.cur_frame
+        frame = sess_data.cur_frame,
+        spurious_pause = sess_data.spurious_pause,
     })
 end
 
@@ -269,6 +271,7 @@ function M.add_session(sess_id,
         controller = controller,
         data_providers = data_providers,
         all_threads_paused = false,
+        spurious_pause = false,
         paused_threads = {},
     }
 
@@ -327,6 +330,8 @@ function M.on_session_thread_pause(sess_id, sess_name, event_data)
     if event_data.thread_id then
         sess_data.paused_threads[event_data.thread_id] = true
     end
+    local is_spurious = daptools.is_spurious_stop(event_data.reason)
+    sess_data.spurious_pause = is_spurious
     _report_session_update(sess_id)
     _switch_to_session(sess_id, event_data.thread_id)
 end
