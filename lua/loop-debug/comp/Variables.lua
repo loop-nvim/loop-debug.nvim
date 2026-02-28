@@ -10,11 +10,12 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field path string
 ---@field name string
 ---@field value string
----@field presentationHint loopdebug.proto.VariablePresentationHint
+---@field presentationHint loopdebug.proto.VariablePresentationHint?
 ---@field variablesReference number?
 ---@field evaluateName string?
 ---@field is_expr boolean?
 ---@field is_na boolean?
+---@field greyout_pending boolean?
 ---@field greyout boolean?
 ---@field scopelabel string?
 
@@ -356,7 +357,7 @@ function Variables:_load_expressions(context)
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
     if not self:get_item(root_id) then
-        self:upsert_item(nil,
+        self:add_item(nil,
             {
                 id = root_id,
                 expanded = root_expanded,
@@ -381,21 +382,38 @@ function Variables:_load_expr_value(context, expr_obj)
     if not self:get_item(root_id) then return end
 
     local item_id = root_id .. "/" .. tostring(expr_obj.id)
-    local path = item_id
-    local existing = self:get_item(item_id)
-    ---@type loopdebug.comp.Variables.ItemDef
-    local var_item = {
-        id = item_id,
-        expanded = self._layout_cache[path],
-        data = existing and existing.data or
-        { path = path, is_expr = true, expr_id = expr_obj.id, is_na = true, value = "not available" }
-    }
+
     local expr = expr_obj.expr
-    var_item.data.name = expr
+    local existing_item = self:get_item(item_id)
+    ---@type loopdebug.comp.Variables.ItemData?
+    local item_data
+    if existing_item then
+        item_data = existing_item.data
+    else
+        item_data = {
+            name = expr,
+            path = item_id,
+            is_expr = true,
+            expr_id = expr_obj.id,
+            is_na = true,
+            value =
+            "not available"
+        }
+        ---@type loopdebug.comp.Variables.ItemDef
+        local item_def = {
+            id = item_id,
+            expanded = self._layout_cache[item_data.path],
+            data = item_data
+        }
+        self:add_item(root_id, item_def)
+    end
+
+    item_data.name = expr
 
     local ds = self._current_data_source
     if not expr or not ds or not ds.frame or not ds.data_providers then
-        self:upsert_item(root_id, var_item)
+        item_data.value = "not available"
+        self:refresh_content()
         return
     end
 
@@ -403,53 +421,64 @@ function Variables:_load_expr_value(context, expr_obj)
         expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
         if self._query_context ~= context then return end
-
+        local children_callback
         if err or not data then
-            var_item.data.value = "not available"
-            var_item.data.is_na = true
-            var_item.data.greyout = false
-            var_item.data.greyout_pending = false
+            item_data.value = "not available"
+            item_data.is_na = true
+            item_data.greyout = false
+            item_data.greyout_pending = false
         else
-            var_item.data.value = data.result
-            var_item.data.presentationHint = data.presentationHint
-            var_item.data.is_na = false
-            var_item.data.greyout = false
-            var_item.data.greyout_pending = false
+            item_data.value = data.result
+            item_data.presentationHint = data.presentationHint
+            item_data.is_na = false
+            item_data.greyout = false
+            item_data.greyout_pending = false
             if data.variablesReference and data.variablesReference > 0 then
-                var_item.children_callback = function(cb)
-                    self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, path, cb)
+                children_callback = function(cb)
+                    self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, item_data.path, cb)
                 end
             end
         end
-        self:upsert_item(root_id, var_item)
+        ---@type loop.comp.ItemTree.ItemDef
+        local update_def = {
+            id = item_id,
+            data = item_data,
+            children_callback = children_callback
+        }
+        self:update_item(update_def)
     end)
 end
 
 ---@param context number
 function Variables:_load_session_vars(context)
     local root_id = "s"
-    local root_expanded = self._layout_cache[root_id]
-    if root_expanded == nil then root_expanded = true end
-
-    ---@type loop.comp.ItemTree.ItemDef
-    local root_item = {
-        id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Variables" }
-    }
-
+    ---@type loop.comp.ItemTree.ChildrenCallback
+    local children_callback
     local ds = self._current_data_source
     if ds and ds.frame then
-        root_item.children_callback = function(cb)
+        children_callback = function(cb)
             ds.data_providers.scopes_provider({ frameId = ds.frame.id }, function(_, scopes_data)
                 if self._query_context ~= context then return end
                 if scopes_data and scopes_data.scopes then
                     self:_load_scopes(context, root_id, root_id, scopes_data.scopes, ds, cb)
                 else
-                    cb({ { id = "na", data = { is_na = true } } })
+                    cb({ { id = "na", data = { is_na = true } } }, true)
                 end
             end)
         end
     end
-    self:upsert_item(nil, root_item)
+    if self:have_item(root_id) then
+        self:set_children_callback(root_id, children_callback)
+    else
+        local root_expanded = self._layout_cache[root_id]
+        if root_expanded == nil then root_expanded = true end
+
+        ---@type loop.comp.ItemTree.ItemDef
+        local root_item = {
+            id = root_id, expanded = root_expanded, children_callback = children_callback, data = { path = root_id, scopelabel = "Variables" }
+        }
+        self:add_item(nil, root_item)
+    end
 end
 
 ---@param comp loop.CompBufferController

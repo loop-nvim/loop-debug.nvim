@@ -80,7 +80,9 @@ local function _start_debug_job(args, page_group, startup_callback, exit_handler
         return startup_callback(nil, err or "failed to start debug job")
     end
 
-    require('loop-debug.ui').show()
+    vim.schedule(function()
+        require('loop-debug.ui').show()
+    end)
 
     -- Success!
     startup_callback(job, nil)
