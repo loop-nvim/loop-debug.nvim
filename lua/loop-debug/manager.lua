@@ -11,23 +11,17 @@ local M             = {}
 -- Type Definitions
 -- =============================================================================
 
----@class loopdebug.mgr.Context
+---@class loopdebug.mgr.ContextData
 ---@field session_ctx number The global session context counter
 ---@field pause_ctx number   The pause state context counter for the current session
 ---@field thread_ctx number  The thread selection context counter
 ---@field frame_ctx number   The stack frame selection context counter
-
----@class loopdebug.mgr.InSessionCtx
----@field pause_ctx number
----@field thread_ctx number
----@field frame_ctx number
-
+---@
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
----@field context_keys loopdebug.mgr.InSessionCtx
 ---@field paused_threads table<number, boolean> Set of paused thread IDs
 ---@field thread_names table<number, string> Map of thread ID to name
 ---@field cur_thread_id number|nil Currently selected thread
@@ -37,14 +31,19 @@ local M             = {}
 ---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
 ---@class loopdebug.mgr.ManagerData
----@field session_ctx number
+---@field context_data loopdebug.mgr.ContextData
 ---@field view_update_seq number
 ---@field current_session_id number|nil
 ---@field session_data table<number, loopdebug.mgr.SessionData>
 
 ---@type loopdebug.mgr.ManagerData
 local _manager_data = {
-    session_ctx = 1,
+    context_data = {
+        session_ctx = 1,
+        thread_ctx = 1,
+        frame_ctx = 1,
+        pause_ctx = 1,
+    },
     view_update_seq = 0,
     session_data = {}
 }
@@ -53,70 +52,44 @@ local _manager_data = {
 -- Context Management
 -- =============================================================================
 
----Builds a snapshot of the current context state to validate async callbacks.
----@return loopdebug.mgr.Context
-local function _build_context()
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    local sess_ctx = sess_data and sess_data.context_keys or nil
-    ---@type loopdebug.mgr.Context
-    local ctx = {
-        session_ctx = mgr_data.session_ctx,
-        pause_ctx = sess_ctx and sess_ctx.pause_ctx or 0,
-        thread_ctx = sess_ctx and sess_ctx.thread_ctx or 0,
-        frame_ctx = sess_ctx and sess_ctx.frame_ctx or 0,
-    }
-    return ctx
+---@return loopdebug.mgr.ContextData
+local function _get_context()
+    return vim.fn.deepcopy(_manager_data.context_data)
 end
-
 ---Increments the context counter for a specific level, invalidating previous async requests.
 ---@param level "session"|"pause"|"thread"|"frame"
 local function _increment_context(level)
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-
+    local ctx = _manager_data.context_data
     if level == "session" then
-        mgr_data.session_ctx = mgr_data.session_ctx + 1
-    elseif sess_data then
-        local ctx = sess_data.context_keys
-        if level == "pause" then
-            ctx.pause_ctx = ctx.pause_ctx + 1
-        elseif level == "thread" then
-            ctx.thread_ctx = ctx.thread_ctx + 1
-        elseif level == "frame" then
-            ctx.frame_ctx = ctx.frame_ctx + 1
-        end
+        ctx.session_ctx = ctx.session_ctx + 1
+    elseif level == "pause" then
+        ctx.pause_ctx = ctx.pause_ctx + 1
+    elseif level == "thread" then
+        ctx.thread_ctx = ctx.thread_ctx + 1
+    elseif level == "frame" then
+        ctx.frame_ctx = ctx.frame_ctx + 1
     end
 end
 
 ---Checks if the context snapshot matches the current state.
----@param ctx loopdebug.mgr.Context The snapshot to check
+---@param ctx loopdebug.mgr.ContextData The snapshot to check
 ---@param level "session"|"pause"|"thread"|"frame" The level of granularity to check
 ---@return boolean
 local function _is_current_context(ctx, level)
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    local cur_ctx = sess_data and sess_data.context_keys or nil
+    local cur_ctx = _manager_data.context_data
 
     if level == "session" then
-        return ctx.session_ctx == mgr_data.session_ctx
-    end
-
-    -- For all other levels, we need active session data
-    if not cur_ctx or ctx.session_ctx ~= mgr_data.session_ctx then
-        return false
-    end
-
-    if level == "pause" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+    elseif level == "pause" then
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
     elseif level == "thread" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
             and ctx.thread_ctx == cur_ctx.thread_ctx
     elseif level == "frame" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
             and ctx.thread_ctx == cur_ctx.thread_ctx
             and ctx.frame_ctx == cur_ctx.frame_ctx
     end
@@ -230,7 +203,7 @@ local function _switch_to_thread(sess_id, thread_id, send_updates)
     if not thread_id or not sess_data then return end
 
     -- 3. Async Fetch: Get top stack frame
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.stack_provider({ threadId = thread_id, levels = 1 }, function(err, data)
         -- Validate context hasn't changed while we were waiting
         if _is_current_context(ctx, "thread") then
@@ -264,7 +237,7 @@ local function _switch_to_session(sess_id, thread_pause_evt)
 
     -- If this is a pause event, we need to sync the thread list first
     if thread_pause_evt then
-        local ctx = _build_context()
+        local ctx = _get_context()
         sess_data.data_providers.threads_provider(function(err, resp)
             -- Validate pause context matches
             if not _is_current_context(ctx, "pause") then return end
@@ -331,7 +304,6 @@ function M.add_session(sess_id,
         sess_name = sess_name,
         controller = controller,
         data_providers = data_providers,
-        context_keys = { pause_ctx = 1, thread_ctx = 1, frame_ctx = 1 },
         paused_threads = {},
         thread_names = {}
     }
@@ -386,7 +358,7 @@ function M.on_session_thread_pause(sess_id, sess_name, event_data)
         local sess_data = mgr_data.session_data[sess_id]
         if not sess_data then return end
         _increment_context("pause")
-        sess_data.paused_threads[0] = true
+        sess_data.paused_threads[event_data.thread_id or 0] = true -- 0 because must indicate that we are paused
         _switch_to_thread(sess_id, nil, true)
         _report_session_update(sess_id)
     else
@@ -485,7 +457,7 @@ local function _process_select_thread_command()
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
     if not sess_id or not sess_data then return false, "No active debug session" end
 
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.threads_provider(function(err, data)
         if _is_current_context(ctx, "pause") then
             if err or not data or not data.threads then
@@ -528,7 +500,7 @@ local function _process_select_frame_command()
     local thread_id = sess_data.cur_thread_id
     if not thread_id then return false, "No selected thread" end
 
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.stack_provider({ threadId = thread_id }, function(err, data)
         if _is_current_context(ctx, "thread") then
             if err or not data then
@@ -593,7 +565,7 @@ local function _process_inspect_var_command(opts)
     end
 
     local frame = sess_data.cur_frame
-    local ctx = _build_context()
+    local ctx = _get_context()
 
     sess_data.data_providers.evaluate_provider({
         expression = expr,

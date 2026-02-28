@@ -412,8 +412,6 @@ function Variables:_load_expr_value(context, expr_obj)
 
     local ds = self._current_data_source
     if not expr or not ds or not ds.frame or not ds.data_providers then
-        item_data.value = "not available"
-        self:refresh_content()
         return
     end
 
