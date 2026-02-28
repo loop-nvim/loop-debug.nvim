@@ -482,6 +482,7 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
     if self._disabled_expressions[expr_obj.expr] then
         item_data.is_na = true
         item_data.value = "disabled"
+        if on_complete then on_complete() end
         return
     end
 
@@ -491,6 +492,8 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
     }, function(err, data)
         if spurious_pause_counter ~= self._spurious_pause_counter then
             self._disabled_expressions[expr_obj.expr] = true
+            if on_complete then on_complete() end
+            return
         end
         if self._query_context ~= context then return end
         if not self:have_item(item_id) then return end
