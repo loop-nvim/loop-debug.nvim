@@ -482,6 +482,7 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
     if self._disabled_expressions[expr_obj.expr] then
         item_data.is_na = true
         item_data.value = "disabled"
+        item_data.greyout_pending = false
         if on_complete then on_complete() end
         return
     end
