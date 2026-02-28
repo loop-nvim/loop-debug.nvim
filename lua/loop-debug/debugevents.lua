@@ -17,7 +17,6 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field session_name string?
 ---@field data_providers loopdebug.session.DataProviders?
 ---@field thread_id number|nil
----@field thread_name string|nil
 ---@field frame loopdebug.proto.StackFrame|nil
 
 ---@class loopdebug.events.Tracker

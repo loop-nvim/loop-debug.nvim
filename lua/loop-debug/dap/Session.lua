@@ -470,7 +470,7 @@ function Session:debug_continue(thread_id, all_threads)
             ---@type loopdebug.session.notify.ThreadsEventScope
             local data = {
                 thread_id = thread_id,
-                all_thread = all_threads,
+                all_threads = all_threads,
             }
             self:_notify_tracker("threads_continued", data)
         end)
@@ -606,7 +606,7 @@ function Session:_on_stopped_event(event)
     ---@type loopdebug.session.notify.ThreadsEventScope
     local data = {
         thread_id = event.threadId,
-        all_thread = event.allThreadsStopped,
+        all_threads = event.allThreadsStopped,
         reason = event.reason,
     }
     self:_notify_tracker("threads_paused", data)
@@ -624,7 +624,7 @@ function Session:_on_continued_event(event)
     ---@type loopdebug.session.notify.ThreadsEventScope
     local data = {
         thread_id = event.threadId,
-        all_thread = event.allThreadsContinued,
+        all_threads = event.allThreadsContinued,
     }
     self:_notify_tracker("threads_continued", data)
 end

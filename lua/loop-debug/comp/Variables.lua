@@ -460,7 +460,7 @@ function Variables:_load_session_vars(context)
                 if scopes_data and scopes_data.scopes then
                     self:_load_scopes(context, root_id, root_id, scopes_data.scopes, ds, cb)
                 else
-                    cb({ { id = "na", data = { is_na = true } } }, true)
+                    cb({ { id = "na", data = { is_na = true } } })
                 end
             end)
         end

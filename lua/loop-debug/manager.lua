@@ -22,8 +22,8 @@ local M             = {}
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
+---@field all_threads_paused boolean
 ---@field paused_threads table<number, boolean> Set of paused thread IDs
----@field thread_names table<number, string> Map of thread ID to name
 ---@field cur_thread_id number|nil Currently selected thread
 ---@field cur_frame loopdebug.proto.StackFrame|nil Currently selected stack frame
 ---@field debuggee_output_ctrl loop.OutputBufferController|nil
@@ -125,7 +125,6 @@ local function _report_current_view(trigger)
         session_name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
         thread_id = sess_data.cur_thread_id,
-        thread_name = sess_data.thread_names[sess_data.cur_thread_id],
         frame = sess_data.cur_frame
     })
 end
@@ -161,11 +160,10 @@ local function _set_frame_silent(frame)
 end
 
 ---Internal helper: Sets the current thread without triggering side effects.
----@param sess_id number
 ---@param thread_id number?
-local function _set_thread_silent(sess_id, thread_id)
+local function _set_thread_silent(thread_id)
     local mgr_data = _manager_data
-    local sess_data = mgr_data.session_data[sess_id]
+    local sess_data = mgr_data.session_data[mgr_data.current_session_id]
     if not sess_data then return end
 
     _increment_context("thread")
@@ -187,15 +185,15 @@ local function _switch_to_frame(frame, send_updates)
 end
 
 ---Switches the active thread, optionally fetches the stack, and updates UI.
----@param sess_id number
 ---@param thread_id number?
 ---@param send_updates boolean
-local function _switch_to_thread(sess_id, thread_id, send_updates)
+local function _switch_to_thread(thread_id, send_updates)
     local mgr_data = _manager_data
+    local sess_data = mgr_data.session_data[_manager_data.current_session_id]
+    if not sess_data then return end
 
     -- 1. Update internal state immediately
-    _set_thread_silent(sess_id, thread_id)
-    local sess_data = mgr_data.session_data[sess_id]
+    _set_thread_silent(thread_id)
 
     -- 2. Report initial view (thread changed, frame empty)
     if send_updates then _report_current_view("thread") end
@@ -218,58 +216,20 @@ end
 
 ---Switches the active session and handles thread synchronization on pause.
 ---@param sess_id number?
----@param thread_pause_evt loopdebug.session.notify.ThreadsEventScope? If provided, syncs threads
-local function _switch_to_session(sess_id, thread_pause_evt)
+---@param thread_id number?
+local function _switch_to_session(sess_id, thread_id)
     _increment_context("session")
 
     local mgr_data = _manager_data
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    if not sess_id or not sess_data then
+    if not sess_data then
         mgr_data.current_session_id = nil
         _report_current_view("session")
         return
     end
 
     mgr_data.current_session_id = sess_id
-
-    -- Determine target thread
-    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
-
-    -- If this is a pause event, we need to sync the thread list first
-    if thread_pause_evt then
-        local ctx = _get_context()
-        sess_data.data_providers.threads_provider(function(err, resp)
-            -- Validate pause context matches
-            if not _is_current_context(ctx, "pause") then return end
-
-            if err or not resp or not resp.threads then
-                vim.notify("Failed to load thread list - " .. (err or ""))
-            else
-                -- Update thread names and paused state
-                sess_data.thread_names = {}
-                if thread_pause_evt.all_thread then
-                    sess_data.paused_threads = {}
-                end
-
-                for _, thread in pairs(resp.threads) do
-                    sess_data.thread_names[thread.id] = thread.name
-                    if thread_pause_evt.all_thread then
-                        sess_data.paused_threads[thread.id] = true
-                    end
-                end
-
-                if not thread_pause_evt.all_thread then
-                    sess_data.paused_threads[thread_pause_evt.thread_id] = true
-                end
-
-                _report_session_update(sess_id)
-                _switch_to_thread(sess_id, thread_id, true)
-            end
-        end)
-    else
-        -- Just a session switch, simply switch to its last known thread
-        _switch_to_thread(sess_id, thread_id, true)
-    end
+    _switch_to_thread(thread_id or sess_data.cur_thread_id, true)
 end
 
 -- =============================================================================
@@ -304,8 +264,8 @@ function M.add_session(sess_id,
         sess_name = sess_name,
         controller = controller,
         data_providers = data_providers,
+        all_threads_paused = false,
         paused_threads = {},
-        thread_names = {}
     }
 
     _manager_data.session_data[sess_id] = session_data
@@ -353,18 +313,20 @@ end
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
 function M.on_session_thread_pause(sess_id, sess_name, event_data)
-    if daptools.is_spurious_stop(event_data.reason) then
-        local mgr_data = _manager_data
-        local sess_data = mgr_data.session_data[sess_id]
-        if not sess_data then return end
-        _increment_context("pause")
-        sess_data.paused_threads[event_data.thread_id or 0] = true -- 0 because must indicate that we are paused
-        _switch_to_thread(sess_id, nil, true)
-        _report_session_update(sess_id)
+    local mgr_data = _manager_data
+    local sess_data = mgr_data.session_data[sess_id]
+    if not sess_data then return end
+
+    if event_data.all_threads then
+        sess_data.all_threads_paused = true
     else
-        -- Switch session handles the context update, thread syncing, and reporting
-        _switch_to_session(sess_id, event_data)
+        sess_data.all_threads_paused = false
+        sess_data.paused_threads[event_data.thread_id] = true
     end
+
+    _report_session_update(sess_id)
+
+    _switch_to_session(sess_id, event_data.thread_id)
 end
 
 ---@param sess_id number
@@ -375,19 +337,24 @@ function M.on_session_thread_continue(sess_id, sess_name, event_data)
     local sess_data = mgr_data.session_data[sess_id]
     if not sess_data then return end
 
-    if event_data.all_thread then
+    local switch = false
+    if sess_id == mgr_data.current_session_id and (event_data.all_threads or event_data.thread_id == sess_data.cur_thread_id) then
         _increment_context("pause")
-        sess_data.paused_threads = {}
-        _switch_to_thread(sess_id, nil, true)
-    else
-        _increment_context("thread")
-        sess_data.paused_threads[event_data.thread_id] = nil
-        -- Only switch away if the CONTINUED thread was the ACTIVE thread
-        if sess_data.cur_thread_id == event_data.thread_id then
-            _switch_to_thread(sess_id, nil, true)
-        end
+        switch = true
     end
+
+    if event_data.all_threads then
+        sess_data.all_threads_paused = false
+        sess_data.paused_threads = {}
+    else
+        sess_data.paused_threads[event_data.thread_id] = nil
+    end
+
     _report_session_update(sess_id)
+
+    if switch then
+        _switch_to_thread(nil, true)
+    end
 end
 
 ---@param sess_id number
@@ -433,7 +400,9 @@ local function _process_select_session_command()
     local mgr_data = _manager_data
     local choices = {}
     local initial
-    for sess_id, sess_data in pairs(mgr_data.session_data) do
+    local ids = vim.tbl_keys(mgr_data.session_data)
+    for _, sess_id in ipairs(ids) do
+        local sess_data = mgr_data.session_data[sess_id]
         table.insert(choices, { label = sess_data.sess_name, data = sess_id })
         if sess_id == mgr_data.current_session_id then
             initial = #choices
@@ -480,7 +449,7 @@ local function _process_select_thread_command()
                     initial = initial,
                     callback = function(thread_id)
                         if thread_id and sess_id == mgr_data.current_session_id then
-                            _switch_to_thread(sess_id, thread_id, true)
+                            _switch_to_thread(thread_id, true)
                         end
                     end
                 })
