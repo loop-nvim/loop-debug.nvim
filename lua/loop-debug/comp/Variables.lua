@@ -132,7 +132,7 @@ function Variables:init()
     })
 
     ---@type loopdebug.comp.Vars.Expression[]
-    self._expressions = {}
+    self._expressions = persistence.get_config("expr") or {}
 
     self._query_context = 0
     self._spurious_pause_counter = 0
@@ -382,24 +382,49 @@ function Variables:_load_expressions(context)
         self:remove_children(root_id)
         return
     end
-
-    local exr_names = {}
-    for _, exrobj in ipairs(self._expressions) do
-        exr_names[exrobj.expr] = true
-    end
-
-    local children = self:get_children(self._expr_root_id)
-    for _, child in ipairs(children) do
-        if not exr_names[child.data.name] then
-            self:remove_item(child.id)
+    do
+        local exr_names = {}
+        for _, expr_obj in ipairs(self._expressions) do
+            exr_names[expr_obj.expr] = true
+        end
+        local children = self:get_children(self._expr_root_id)
+        for _, child in ipairs(children) do
+            if not exr_names[child.data.name] then
+                self:remove_item(child.id)
+            end
         end
     end
+    for _, expr_obj in ipairs(self._expressions) do
+        local item_id = root_id .. "/" .. tostring(expr_obj.id)
+        local existing_item = self:get_item(item_id)
+        if not existing_item then
+            local item_data = {
+                name = expr_obj.expr,
+                path = item_id,
+                is_expr = true,
+                expr_id = expr_obj.id,
+                is_na = true,
+                value = "not available"
+            }
+            ---@type loopdebug.comp.Variables.ItemDef
+            local item_def = {
+                id = item_id,
+                expanded = self._layout_cache[item_data.path],
+                data = item_data
+            }
+            self:add_item(root_id, item_def)
+        end
+    end
+
     local list = vim.fn.copy(persistence.get_config("expr") or {})
-    local load_next = function()
+    local load_next
+    load_next = function()
         if #list == 0 then return end
         local exprobj = table.remove(list, 1)
         self:_load_expr_value(context, exprobj, function()
-
+            vim.schedule(function()
+                load_next()
+            end)
         end)
     end
     load_next()
@@ -422,29 +447,8 @@ function Variables:_load_expr_value(context, expr_obj, on_complete)
 
     local expr = expr_obj.expr
     local existing_item = self:get_item(item_id)
-    ---@type loopdebug.comp.Variables.ItemData?
-    local item_data
-    if existing_item then
-        item_data = existing_item.data
-    else
-        item_data = {
-            name = expr,
-            path = item_id,
-            is_expr = true,
-            expr_id = expr_obj.id,
-            is_na = true,
-            value = "not available"
-        }
-        ---@type loopdebug.comp.Variables.ItemDef
-        local item_def = {
-            id = item_id,
-            expanded = self._layout_cache[item_data.path],
-            data = item_data
-        }
-        self:add_item(root_id, item_def)
-    end
-
-    item_data.name = expr
+    if not existing_item then return end
+    local item_data = existing_item.data
 
     local ds = self._current_data_source
     if not expr or not ds or not ds.frame or not ds.data_providers then
@@ -535,7 +539,7 @@ function Variables:link_to_buffer(comp)
         floatwin.input_at_cursor({},
             function(expr)
                 if not expr or expr == "" then return end
-                local expr_obj = _add_expr(expr)
+                local expr_obj = self:_add_expr(expr)
                 if expr_obj then
                     self:_load_expr_value(self._query_context, expr_obj)
                 end
@@ -549,7 +553,7 @@ function Variables:link_to_buffer(comp)
             function(expr)
                 if not expr or expr == "" then return end
                 if expr ~= item.data.name then
-                    local expr_obj = _reset_expr(item.data.expr_id, item.data.name, expr)
+                    local expr_obj = self:_reset_expr(item.data.expr_id, item.data.name, expr)
                     if expr_obj then
                         self:_load_expr_value(self._query_context, expr_obj)
                     end
@@ -627,7 +631,7 @@ function Variables:link_to_buffer(comp)
         callback = function()
             local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
-                if _remove_expr(cur.data.expr_id) then
+                if self:_remove_expr(cur.data.expr_id) then
                     self:remove_item(cur.id)
                 end
             end
