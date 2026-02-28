@@ -317,21 +317,17 @@ end
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
 function M.on_session_thread_pause(sess_id, sess_name, event_data)
-    local mgr_data = _manager_data
-    local sess_data = mgr_data.session_data[sess_id]
+    local sess_data = _manager_data.session_data[sess_id]
     if not sess_data then return end
-
+    -- If the adapter says 'all stopped', we can assume the whole process is halted
     if event_data.all_threads then
         sess_data.all_threads_paused = true
-        -- We don't clear sess_data.paused_threads here because
-        -- individual threads might already be in that list.
     end
-    -- Always track the specific thread that triggered the event
+    -- Always track the specific thread that hit the signal
     if event_data.thread_id then
         sess_data.paused_threads[event_data.thread_id] = true
     end
     _report_session_update(sess_id)
-    -- Focus the session and the specific thread that hit the breakpoint
     _switch_to_session(sess_id, event_data.thread_id)
 end
 
@@ -343,30 +339,24 @@ function M.on_session_thread_continue(sess_id, sess_name, event_data)
     local sess_data = mgr_data.session_data[sess_id]
     if not sess_data then return end
 
-    local is_current = (sess_id == mgr_data.current_session_id)
-    local affected_active_thread = (event_data.thread_id == sess_data.cur_thread_id)
-
     if event_data.all_threads then
+        -- Hard Reset: Everything is moving
         sess_data.all_threads_paused = false
         sess_data.paused_threads = {}
-
-        -- If all threads started moving, invalidate any pending stack/var fetches
-        if is_current then
-            _increment_context("pause")
-            _switch_to_thread(nil, true)
-        end
     else
-        -- Only one thread continued
+        -- Single thread continued
         sess_data.paused_threads[event_data.thread_id] = nil
-
-        -- If we were looking at this specific thread, it's no longer inspectable
-        if is_current and affected_active_thread then
-            sess_data.all_threads_paused = false -- Can't be 'all paused' if one just left
-            _increment_context("pause")
-            _switch_to_thread(nil, true)
+        -- If a single thread starts, 'all_threads_paused' cannot logically remain true.
+        sess_data.all_threads_paused = false
+    end
+    -- Handle UI Context Invalidation
+    if sess_id == mgr_data.current_session_id then
+        -- If the thread we were looking at is the one that started moving...
+        if event_data.all_threads or event_data.thread_id == sess_data.cur_thread_id then
+            _increment_context("pause")  -- Kill pending async requests
+            _switch_to_thread(nil, true) -- Clear the view
         end
     end
-
     _report_session_update(sess_id)
 end
 
@@ -414,6 +404,7 @@ local function _process_select_session_command()
     local choices = {}
     local initial
     local ids = vim.tbl_keys(mgr_data.session_data)
+    vim.fn.sort(ids)
     for _, sess_id in ipairs(ids) do
         local sess_data = mgr_data.session_data[sess_id]
         table.insert(choices, { label = sess_data.sess_name, data = sess_id })
