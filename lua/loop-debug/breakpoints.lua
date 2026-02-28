@@ -543,7 +543,7 @@ function M.select_breakpoint(ws_dir)
     -- ---------------------------------------------------------------
     local cur_file, cur_lnum = uitools.get_current_file_and_line()
     local choices = {}
-    local initial
+
     for _, sign in ipairs(_sign_group.get_signs(true)) do
         local label_chunks, virt_lines = format_breakpoint_chunks(sign)
         table.insert(choices, {
@@ -558,9 +558,6 @@ function M.select_breakpoint(ws_dir)
                 sign = sign
             }
         })
-        if cur_file == sign.file and cur_lnum == sign.lnum then
-            initial = #choices
-        end
     end
 
     if #choices == 0 then
@@ -574,6 +571,14 @@ function M.select_breakpoint(ws_dir)
         end
         return a.lnum < b.lnum
     end)
+
+    local initial
+    for idx, choice in ipairs(choices) do
+        if cur_file == choice.file and cur_lnum == choice.lnum then
+            initial = idx
+            break
+        end
+    end
 
     selector.select({
         prompt = "Breakpoints",
