@@ -24,8 +24,8 @@ function M.init()
         local normal = vim.api.nvim_get_hl(0, { name = "Normal" })
         local bg = normal.bg or 0x000000
 
-        local reddish = 0xB23434
-        return uitools.blend_colors(bg, reddish, 0.10)
+        local reddish = config.current.debug_line_blend_color or 0xD65A5A
+        return uitools.blend_colors(bg, reddish, 0.12)
     end
 
     local sign_highlight, line_highlight = "LoopDebugCurrentFrame", "LoopDebugCurrentFrameLine"
@@ -54,14 +54,16 @@ function M.init()
             end
             if view.trigger ~= "variable" then
                 if not filetools.file_exists(frame.source.path) then return end
-                -- Open file and move cursor
-                uitools.smart_open_file(frame.source.path, frame.line, frame.column)
+                if not view.spurious_pause then
+                    -- Open file and move cursor
+                    uitools.smart_open_file(frame.source.path, frame.line, frame.column)
+                end
                 -- Place sign for current frame
                 _sign_group.set_file_sign(1, frame.source.path, frame.line, _sign_name)
                 -- highlight line
                 _highlight_group.set_file_extmark(1, frame.source.path, frame.line, 0, {
                     line_hl_group = line_highlight,
-                     hl_mode = "blend"
+                    hl_mode = "blend"
                 })
             end
         end

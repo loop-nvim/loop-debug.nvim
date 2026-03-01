@@ -1,5 +1,6 @@
 local class            = require('loop.tools.class')
 local Session          = require('loop-debug.dap.Session')
+local config           = require("loop-debug.config")
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -285,10 +286,9 @@ function DebugJob:add_debug_term(sess_id, name, args, on_success, on_failure)
     local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
     local pd, err = self._page_group.add_page({
         type = "term",
-        buftype = "loopdebug-term",
         label = "Output",
         term_args = start_args,
-        activate = true
+        activate = config.current.auto_switch_page,
     })
     if pd and pd.term_proc then on_success(pd.term_proc:get_pid()) else on_failure(err or "term startup error") end
 end
@@ -337,7 +337,6 @@ function DebugJob:_setup_repl(sesion_id, session_name, controller, data_provider
     -- Setup REPL
     local page_data = self._page_group.add_page({
         type = "repl",
-        buftype = "loopdebug-repl",
         label = "Console",
         activate = false
     })
@@ -401,7 +400,13 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
 
     -- Process Output
     if not sess_data.debuggee_output_ctrl then
-        local page_data = self._page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output", activate = true })
+        local page_data = self._page_group.add_page({
+            type = "output",
+            label =
+            "Output",
+            activate =
+                config.current.auto_switch_page
+        })
         if page_data then
             sess_data.debuggee_output_ctrl = page_data.output_buf
         end
@@ -432,7 +437,7 @@ function DebugJob:_add_dap_log(sess_id, sess_name, msg, inbound)
         end
     end
     if sess_data.dap_log_ctrl then
-        local prefix = inbound and "recv: "  or "send: "
+        local prefix = inbound and "recv: " or "send: "
         sess_data.dap_log_ctrl.add_lines(prefix .. msg)
     end
 end

@@ -1,4 +1,5 @@
 local strtools = require('loop.tools.strtools')
+local config = require("loop-debug.config")
 
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
@@ -12,7 +13,6 @@ end
 
 ---@param task loopdebug.Task
 local function get_task_args(task)
-    if task.args then return task.args end
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
     return { unpack(cmdparts, 2) }
 end
@@ -314,10 +314,9 @@ debuggers["js-debug"] = {
         }
         local page_data, page_err = context.page_group.add_page({
             type = "term",
-            buftype = "loopdebug-term",
             label = "Debug Server",
             term_args = args,
-            activate = true,
+            activate = config.current.auto_switch_page,
         })
         if not page_data then
             callback(false, page_err)
