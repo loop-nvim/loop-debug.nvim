@@ -203,6 +203,29 @@ end
 
 ---@param file string
 ---@param line integer
+local function _toggle_breakpoint(file, line)
+    local existing = _get_sign_at(file, line)
+    if existing then
+        ---@type loop.debug_ui.BreakpointSignData
+        local data = existing.user_data
+        if (data.condition and data.condition ~= "") or (data.hitCondition and data.hitCondition ~= "") then
+            vim.notify("Cannot toggle a condition breakpoint")
+            return
+        end
+        if (data.logMessage and data.logMessage ~= "") then
+            vim.notify("Cannot toggle a logpoint")
+            return
+        end
+        _delete_breakpoint(file, line)
+        return
+    end
+    _set_breakpoint(_next_breakpoint_id(), file, line, {
+        enabled = true
+    })
+end
+
+---@param file string
+---@param line integer
 local function _set_normal_breakpoint(file, line)
     local existing = _get_sign_at(file, line)
     if existing then
@@ -366,6 +389,7 @@ end
 
 ---@param command nil
 ---| "set"
+---| "toggle"
 ---| "logpoint"
 ---| "conditional"
 ---| "enable"
@@ -382,6 +406,11 @@ function M.breakpoints_command(command)
         local file, line = uitools.get_current_file_and_line()
         if file and line then
             _set_normal_breakpoint(file, line)
+        end
+    elseif command == "toggle" then
+        local file, line = uitools.get_current_file_and_line()
+        if file and line then
+            _toggle_breakpoint(file, line)
         end
     elseif command == "logpoint" then
         local file, line = uitools.get_current_file_and_line()

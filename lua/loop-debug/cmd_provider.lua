@@ -31,7 +31,7 @@ local function _debug_commands(args)
         }
     end
     if #args == 1 and args[1] == "breakpoint" then
-        return { "list", "set", "logpoint", "conditional",
+        return { "list", "set", "toggle", "logpoint", "conditional",
             "enable", "disable", "toggle_enabled", "disable_all", "enable_all",
             "delete", "clear_file", "clear_all" }
     end

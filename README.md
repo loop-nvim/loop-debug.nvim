@@ -113,6 +113,16 @@ All fields support [loop.nvim macros](https://github.com/mbfoss/loop.nvim) (e.g.
 
 Adapter paths are often resolved from Mason; install the matching package if a debugger fails to start.
 
+## Debug UI
+
+The debug UI gives you a full view of the debug sessions:
+
+- **Sessions & threads** – See all active debug sessions, threads, and stack frames, and switch between them.
+- **Call stack & scopes** – Inspect the current call stack and expand scopes to see locals, arguments, and other variables.
+- **Watches** – Add and edit watch expressions; values are refreshed as you step through code (use `i` to insert watch expression, and `c` to change an existing expression).
+- **Variables** – Inspect variables in the variables view (use `c` to to change the value of a variable, when supported by the adapter)
+- **inline values** Local variables are shown as virtual text when a thread is paused (the treesitter parser for the file type must be installed for this to work, can be disabled in the config table).
+
 ## Templates
 
 Under the **Debug** category, templates include:
@@ -140,7 +150,7 @@ require("loop-debug").setup({
     stack_levels_limit = 100,     -- Max stack frames
     enable_inlay_variables = true, -- Inline variable values in source
     anti_flicker_delay = 500,     -- ms
-    debug_line_blend_color = 0xD65A5A,
+    debug_line_blend_color = 0xD65A5A, -- reddish tint
     sign_priority = {
         breakpoints = 80,
         currentframe = 100,
@@ -161,15 +171,15 @@ require("loop-debug").setup({
         disabled_logpoint        = "ø",
         disabled_cond_breakpoint = "ø",
     },
-    debuggers = {}, -- Add or override debugger configs
 })
 ```
 
 
-## Keymaps suggestion
+## Keymap suggestion
 ```lua
+vim.keymap.set("n", "<leader>d", "<Nop>", { noremap = true })-- to avoid deleting text by accident
 vim.keymap.set("n", "<leader>du", ":Loop debug ui<CR>", { desc = "Toggle UI", silent = true })
-vim.keymap.set("n", "<leader>bb", ":Loop debug breakpoint<CR>", { desc = "Set breakpoints", silent = true })
+vim.keymap.set("n", "<leader>bb", ":Loop debug breakpoint toggle<CR>", { desc = "Toggle breakpoints", silent = true })
 vim.keymap.set("n", "<leader>bd", ":Loop debug breakpoint delete<CR>", { desc = "Delete breakpoints", silent = true })
 vim.keymap.set("n", "<leader>bc", ":Loop debug breakpoint conditional<CR>", { desc = "Set conditional breakpoint", silent = true })
 vim.keymap.set("n", "<leader>bl", ":Loop debug breakpoint logpoint<CR>", { desc = "Set logpoint", silent = true })
@@ -193,9 +203,8 @@ vim.keymap.set("n", "<leader>dK", ":Loop debug terminate_all<CR>", { desc = "Ter
 vim.keymap.set("n", "<A-l>", ":Loop debug step_in<CR>", { desc = "Step into", silent = true })
 vim.keymap.set("n", "<A-h>", ":Loop debug step_out<CR>", { desc = "Step out", silent = true })
 vim.keymap.set("n", "<A-j>", ":Loop debug step_over<CR>", { desc = "Step over", silent = true })
-vim.keymap.set("n", "<A-k>", ":Loop debug step_back<CR>", { desc = "Step back", silent = true })
-vim.keymap.set("n", "<A-;>", ":Loop debug continue_all<CR>", { desc = "Step back", silent = true })
-vim.keymap.set("n", "<A-b>", ":Loop debug breakpoint toggle<CR>", { desc = "Toggle breakpoint", silent = true })
+vim.keymap.set("n", "<A-c>", ":Loop debug continue_all<CR>", { desc = "Step back", silent = true })
+vim.keymap.set("n", "<A-b>", ":Loop debug breakpoint toggle<CR>", { desc = "Toggle breakpoints", silent = true })
 ```
 
 ## License
