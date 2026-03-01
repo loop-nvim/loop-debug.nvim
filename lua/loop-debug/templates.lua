@@ -1,5 +1,17 @@
 ---@type loop.taskTemplate[]
 return {
+    {
+        name = "Default template",
+        task = {
+            name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
+            type = "debug",
+            command = "",
+            debugger = "",
+            request = "",
+        }
+    },
     -- ==================================================================
     -- Lua
     -- ==================================================================
@@ -7,6 +19,8 @@ return {
         name = "lua - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${file:lua}",
             cwd = "${wsdir}",
@@ -18,6 +32,8 @@ return {
         name = "lua - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "lua:remote",
             request = "attach",
@@ -33,6 +49,8 @@ return {
         name = "lldb - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${prompt:Select binary,./,file}",
             cwd = "${wsdir}",
@@ -47,6 +65,8 @@ return {
         name = "lldb - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "lldb",
             request = "attach",
@@ -62,6 +82,8 @@ return {
         name = "gdb - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${prompt:Select binary,./,file}",
             cwd = "${wsdir}",
@@ -74,6 +96,8 @@ return {
         name = "gdb - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "gdb",
             request = "attach",
@@ -88,6 +112,8 @@ return {
         name = "codelldb - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             program = "${prompt:Select binary,./,file}",
             cwd = "${wsdir}",
@@ -102,6 +128,8 @@ return {
         name = "codelldb - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "codelldb",
             request = "attach",
@@ -116,6 +144,8 @@ return {
         name = "node - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${file:javascript}",
             cwd = "${wsdir}",
@@ -129,6 +159,8 @@ return {
         name = "node - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "js-debug",
             request = "attach",
@@ -145,6 +177,8 @@ return {
         name = "python - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${file:python}",
             cwd = "${wsdir}",
@@ -157,6 +191,8 @@ return {
         name = "python - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "debugpy:remote",
             request = "attach",
@@ -173,6 +209,8 @@ return {
         name = "go - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             cwd = "${wsdir}",
             debugger = "go",
@@ -183,6 +221,8 @@ return {
         name = "go - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "go",
             request = "attach",
@@ -197,6 +237,8 @@ return {
         name = "chrome - run",
         task = {
             name = "Launch",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "chrome",
             request = "launch",
@@ -210,6 +252,8 @@ return {
         name = "chrome - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "chrome",
             request = "attach",
@@ -225,6 +269,8 @@ return {
         name = "bash - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             command = "${file}",
             cwd = "${wsdir}",
@@ -240,6 +286,8 @@ return {
         name = "php - listen",
         task = {
             name = "Listen",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "php",
             request = "launch",
@@ -255,6 +303,8 @@ return {
         name = "netcoredbg - run",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "netcoredbg",
             request = "launch",
@@ -265,6 +315,8 @@ return {
         name = "netcoredbg - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "netcoredbg",
             request = "attach",
@@ -279,6 +331,8 @@ return {
         name = "java - attach",
         task = {
             name = "Debug",
+            if_running = "refuse",
+            depends_on = {},
             type = "debug",
             debugger = "java",
             request = "attach",

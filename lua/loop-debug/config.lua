@@ -17,7 +17,6 @@
 ---@field disabled_breakpoint string
 ---@field disabled_logpoint string
 ---@field disabled_cond_breakpoint string
----@field variable_value string
 
 ---@class loop-debug.Config
 ---@field auto_switch_page? boolean
@@ -27,7 +26,6 @@
 ---@field enable_inlay_variables? boolean
 ---@field sign_priority? loop-debug.Config.SignPriority
 ---@field symbols? loop-debug.Config.Symbols
----@field debuggers? table<string,loopdebug.Config.Debugger>
 ---@field enable_dap_log boolean?
 
 local M = {}

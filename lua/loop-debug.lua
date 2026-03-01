@@ -34,10 +34,7 @@ local DEFAULT_CONFIG = {
         disabled_breakpoint      = "ø",
         disabled_logpoint        = "ø",
         disabled_cond_breakpoint = "ø",
-        variable_value           = "✱"
-
     },
-    debuggers = require("loop-debug.debuggers")
 }
 
 -----------------------------------------------------------
@@ -82,6 +79,13 @@ function M.init()
     require('loop-debug.curframe').init()
     require('loop-debug.inlinevars').init()
     require('loop-debug.ui').init()
+end
+
+---@param name string
+---@param based_on string
+---@param debugger_config loopdebug.Config.Debugger
+function M.register_debugger(name, based_on, debugger_config)
+    require("loop-debug.debuggers").register_debugger(name, based_on, debugger_config)
 end
 
 return M
