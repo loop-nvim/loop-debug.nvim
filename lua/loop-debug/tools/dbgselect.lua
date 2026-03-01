@@ -14,10 +14,11 @@ function M.select(callback)
             })
     end
     selector.select({
-        prompt = "Select debugger",
-        items = choices,
-        callback = callback,
-    })
+            prompt = "Select debugger",
+            items = choices,
+        },
+        callback
+    )
 end
 
 return M

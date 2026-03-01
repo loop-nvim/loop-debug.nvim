@@ -418,13 +418,14 @@ local function _process_select_session_command()
         end
     end
     selector.select({
-        prompt = "Select debug session",
-        items = choices,
-        initial = initial,
-        callback = function(sess_id)
+            prompt = "Select debug session",
+            items = choices,
+            initial = initial,
+        },
+        function(sess_id)
             if sess_id then _switch_to_session(sess_id) end
         end
-    })
+    )
     return true
 end
 
@@ -453,15 +454,16 @@ local function _process_select_thread_command()
                     end
                 end
                 selector.select({
-                    prompt = "Select thread",
-                    items = choices,
-                    initial = initial,
-                    callback = function(thread_id)
+                        prompt = "Select thread",
+                        items = choices,
+                        initial = initial,
+                    },
+                    function(thread_id)
                         if thread_id and sess_id == mgr_data.current_session_id then
                             _switch_to_thread(thread_id, true)
                         end
                     end
-                })
+                )
             end
         end
     end)
@@ -510,17 +512,18 @@ local function _process_select_frame_command()
                     end
                 end
                 selector.select({
-                    prompt = "Select frame",
-                    items = choices,
-                    initial = initial,
-                    file_preview = true,
-                    list_wrap = false,
-                    callback = function(frame)
+                        prompt = "Select frame",
+                        items = choices,
+                        initial = initial,
+                        file_preview = true,
+                        list_wrap = false,
+                    },
+                    function(frame)
                         if frame and sess_id == mgr_data.current_session_id and thread_id == sess_data.cur_thread_id then
                             _switch_to_frame(frame, true)
                         end
                     end
-                })
+                )
             end
         end
     end)

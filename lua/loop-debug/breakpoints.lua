@@ -581,16 +581,17 @@ function M.select_breakpoint(ws_dir)
     end
 
     selector.select({
-        prompt = "Breakpoints",
-        items = choices,
-        initial = initial,
-        file_preview = true,
-        callback = function(data)
+            prompt = "Breakpoints",
+            items = choices,
+            initial = initial,
+            file_preview = true,
+        },
+        function(data)
             if data and data.file then
                 uitools.smart_open_file(data.file, data.lnum, data.column)
             end
         end
-    })
+    )
 end
 
 -- ===================================================================
