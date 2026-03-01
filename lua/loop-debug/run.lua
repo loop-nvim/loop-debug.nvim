@@ -2,7 +2,7 @@ local M = {}
 
 local config = require('loop-debug.config')
 local DebugJob = require('loop-debug.DebugJob')
-local SessionList = require('loop-debug.comp.SessionList')
+local debuggers = require("loop-debug.debuggers")
 local manager = require('loop-debug.manager')
 local breakpoints = require('loop-debug.breakpoints')
 local fntools = require('loop.tools.fntools')
@@ -107,8 +107,8 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
         return nil, "task.request must be 'launch' or 'attach'"
     end
 
-    ---@type loopdebug.Config.Debugger
-    local debugger = config.current.debuggers[task.debugger]
+    ---@type loopdebug.Config.Debugger?
+    local debugger = debuggers.get_debugger(task.debugger)
     if not debugger then
         return nil, ("no debugger config found for task.debugger '%s'"):format(task.debugger)
     end

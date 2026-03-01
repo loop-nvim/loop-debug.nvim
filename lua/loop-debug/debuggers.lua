@@ -1,5 +1,8 @@
+local M = {}
+
 local strtools = require('loop.tools.strtools')
 local config = require("loop-debug.config")
+
 
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
@@ -82,12 +85,15 @@ local function mason_bin(name)
 end
 
 ---@type table<string,loopdebug.Config.Debugger>
-local debuggers = {}
+local _debuggers = {}
+
+---@type table<string,loopdebug.Config.Debugger>
+local _user_debuggers = {}
 
 -- ==================================================================
 -- Lua (Local/Remote)
 -- ==================================================================
-debuggers.lua = {
+_debuggers.lua = {
     adapter_config = function(ctx)
         local adapter_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
             "extension", "extension", "debugAdapter.js")
@@ -124,7 +130,7 @@ debuggers.lua = {
     end,
 }
 
-debuggers["lua:remote"] = {
+_debuggers["lua:remote"] = {
     adapter_config = function(context)
         return {
             adapter_id = "lua",
@@ -150,7 +156,7 @@ debuggers["lua:remote"] = {
 -- ==================================================================
 -- C / C++ / Rust (LLDB)
 -- ==================================================================
-debuggers.lldb = {
+_debuggers.lldb = {
     adapter_config = function()
         return {
             adapter_id = "lldb",
@@ -183,7 +189,7 @@ debuggers.lldb = {
 -- ==================================================================
 -- C / C++ / Rust (codelldb) with Dynamic Port
 -- ==================================================================
-debuggers.codelldb = {
+_debuggers.codelldb = {
     adapter_config = function()
         return {
             adapter_id = "codelldb",
@@ -227,7 +233,7 @@ debuggers.codelldb = {
 -- ==================================================================
 -- C / C++ / Rust (GDB)
 -- ==================================================================
-debuggers.gdb = {
+_debuggers.gdb = {
     adapter_config = function()
         local home = os.getenv("HOME")
         return {
@@ -272,7 +278,7 @@ debuggers.gdb = {
 -- JavaScript / TypeScript (js-debug)
 -- ==================================================================
 
-debuggers["js-debug"] = {
+_debuggers["js-debug"] = {
     start_hook = function(context, callback)
         local task = context.task
         local port = (type(task.port) == "number" and task.port) or 0
@@ -380,7 +386,7 @@ debuggers["js-debug"] = {
 -- ==================================================================
 -- Python (debugpy)
 -- ==================================================================
-debuggers.debugpy = {
+_debuggers.debugpy = {
 
     adapter_config = function()
         local function python_bin()
@@ -422,7 +428,7 @@ debuggers.debugpy = {
     end,
 }
 
-debuggers["debugpy:remote"] = {
+_debuggers["debugpy:remote"] = {
     adapter_config = function(context)
         return {
             adapter_id = "debugpy",
@@ -448,14 +454,13 @@ debuggers["debugpy:remote"] = {
 -- ==================================================================
 -- Go (delve)
 -- ==================================================================
-debuggers.go = {
+_debuggers.go = {
     adapter_config = function()
         return {
             adapter_id = "go",
             name = "Delve (dlv)",
             type = "executable",
-            command = { mason_bin("delve") },
-            args = { "dap", "-l", "127.0.0.1:0" },
+            command = { mason_bin("delve"), "dap", "-l", "127.0.0.1:0" },
         }
     end,
     launch_args = function(context)
@@ -478,7 +483,7 @@ debuggers.go = {
 -- ==================================================================
 -- Other Languages (Chrome, Bash, PHP, Java, NetCore)
 -- ==================================================================
-debuggers.chrome = {
+_debuggers.chrome = {
     adapter_config = function()
         return {
             adapter_id = "chrome",
@@ -509,7 +514,7 @@ debuggers.chrome = {
     end,
 }
 
-debuggers.bash = {
+_debuggers.bash = {
     adapter_config = function()
         return {
             adapter_id = "bash",
@@ -535,7 +540,7 @@ debuggers.bash = {
     end,
 }
 
-debuggers.php = {
+_debuggers.php = {
     adapter_config = function()
         return {
             adapter_id = "php",
@@ -556,7 +561,7 @@ debuggers.php = {
     end,
 }
 
-debuggers.java = {
+_debuggers.java = {
     adapter_config = function(context)
         return {
             adapter_id = "java",
@@ -575,7 +580,7 @@ debuggers.java = {
     end,
 }
 
-debuggers.netcoredbg = {
+_debuggers.netcoredbg = {
     adapter_config = function()
         return {
             adapter_id = "netcoredbg",
@@ -602,4 +607,36 @@ debuggers.netcoredbg = {
     end,
 }
 
-return debuggers
+---@retun string[]
+function M.debugger_names()
+    local names = {}
+    for name, _ in pairs(_user_debuggers) do
+        names[name] = true
+    end
+    for name, _ in pairs(_debuggers) do
+        names[name] = true
+    end
+    return vim.fn.sort(vim.tbl_keys(names))
+end
+
+---@param name string
+---@return loopdebug.Config.Debugger?
+function M.get_debugger(name)
+    local user_debugger = _user_debuggers[name]
+    if user_debugger then
+        return user_debugger
+    end
+    return _debuggers[name]
+end
+
+---@param name string
+---@param based_on string
+---@param debugger_config loopdebug.Config.Debugger
+function M.register_debugger(name, based_on, debugger_config)
+    local base_debugger = _debuggers[based_on]
+    assert(base_debugger, "Invalid base debugger name: " .. tostring(base_debugger))
+    local new_debugger = vim.fn.deepcopy(base_debugger)
+    _user_debuggers[name] = vim.tbl_extend('force', new_debugger, debugger_config)
+end
+
+return M
