@@ -162,7 +162,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
         request_args = vim.deepcopy(request_args)
     end
 
-    local terminate_on_disconnect = task.terminateOnDisconnect
+    local terminate_on_disconnect = task.terminate_on_disconnect
     if terminate_on_disconnect == nil and task.request == "launch" then
         terminate_on_disconnect = true
     end

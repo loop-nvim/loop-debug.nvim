@@ -56,9 +56,11 @@ return {
             cwd = "${wsdir}",
             debugger = "lldb",
             request = "launch",
-            runInTerminal = true,
-            stopOnEntry = false,
-            initCommands = {},
+            stop_on_entry = false,
+            run_in_terminal = true,
+            debug_options = {
+                initCommands = {},
+            },
         }
     },
     {
@@ -71,7 +73,9 @@ return {
             debugger = "lldb",
             request = "attach",
             processId = "${select-pid}",
-            initCommands = {},
+            debug_options = {
+                initCommands = {},
+            },
         }
     },
 
@@ -89,7 +93,7 @@ return {
             cwd = "${wsdir}",
             debugger = "gdb",
             request = "launch",
-            stopOnEntry = false,
+            stop_on_entry = false,
         }
     },
     {
@@ -115,13 +119,15 @@ return {
             if_running = "refuse",
             depends_on = {},
             type = "debug",
-            program = "${prompt:Select binary,./,file}",
+            command = "${prompt:Select binary,./,file}",
             cwd = "${wsdir}",
             debugger = "codelldb",
             request = "launch",
-            runInTerminal = true,
-            stopOnEntry = false,
-            sourceLanguages = { "cpp" },
+            stop_on_entry = false,
+            run_in_terminal = true,
+            debug_options = {
+                sourceLanguages = { "cpp" },
+            },
         }
     },
     {
@@ -151,8 +157,10 @@ return {
             cwd = "${wsdir}",
             debugger = "js-debug",
             request = "launch",
-            sourceMaps = true,
-            stopOnEntry = false,
+            stop_on_entry = false,
+            debug_options = {
+                sourceMaps = true,
+            },
         }
     },
     {
@@ -164,9 +172,11 @@ return {
             type = "debug",
             debugger = "js-debug",
             request = "attach",
-            address = "127.0.0.1",
             port = "${prompt:Inspector port}",
-            restart = true,
+            debug_options = {
+                address = "127.0.0.1",
+                restart = true,
+            },
         }
     },
 
@@ -184,7 +194,9 @@ return {
             cwd = "${wsdir}",
             debugger = "debugpy",
             request = "launch",
-            justMyCode = false,
+            debug_options = {
+                justMyCode = false,
+            },
         }
     },
     {
@@ -198,7 +210,9 @@ return {
             request = "attach",
             host = "127.0.0.1",
             port = 0,
-            justMyCode = false,
+            debug_options = {
+                justMyCode = false,
+            },
         }
     },
 
@@ -242,10 +256,12 @@ return {
             type = "debug",
             debugger = "chrome",
             request = "launch",
-            url = "http://localhost:3000",
-            webRoot = "${wsdir}",
-            userDataDir = false,
-            sourceMaps = true,
+            debug_options = {
+                url = "http://localhost:3000",
+                webRoot = "${wsdir}",
+                userDataDir = false,
+                sourceMaps = true,
+            },
         }
     },
     {
@@ -258,7 +274,9 @@ return {
             debugger = "chrome",
             request = "attach",
             port = 9222,
-            webRoot = "${wsdir}",
+            debug_options = {
+                webRoot = "${wsdir}",
+            },
         }
     },
 
@@ -292,7 +310,9 @@ return {
             debugger = "php",
             request = "launch",
             port = 9003,
-            pathMappings = { ["/var/www/html"] = "${wsdir}" },
+            debug_options = {
+                pathMappings = { ["/var/www/html"] = "${wsdir}" },
+            },
         }
     },
 
@@ -306,9 +326,9 @@ return {
             if_running = "refuse",
             depends_on = {},
             type = "debug",
+            command = "${prompt:Select binary,./,file}",
             debugger = "netcoredbg",
             request = "launch",
-            program = "${prompt:Select binary,./,file}",
         }
     },
     {

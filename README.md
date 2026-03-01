@@ -76,19 +76,19 @@ Commands be selected using the command selector by typing `:Loop`
 
 
 | Field | Type | Description |
-|-------|------|-------------|
-| `debugger` | string | Backend (e.g. `gdb`, `lldb`, `debugpy`, `js-debug`, `go`, `chrome`). |
-| `request` | string | `"launch"` or `"attach"`. |
-| `command` | string \| array | Program/command to run (launch). |
-| `cwd` | string | Working directory. |
-| `env` | object | Environment variables. |
-| `stopOnEntry` | boolean | Pause at program start. |
-| `runInTerminal` | boolean | Run debuggee in terminal. |
-| `processId` | number \| string | PID for attach (number or macro like `${select-pid}`). |
-| `host`, `port` | string, number | Remote attach. |
-| `justMyCode` | boolean | Step only in user code (e.g. Python). |
-| `initCommands` | string[] | Debugger commands before start. |
-| `sourceMaps`, `pathMappings`, `webRoot`, etc. | — | Source maps and path mapping (see schema). |
+|:---|:---|:---|
+| `debugger` | `string` | Backend name (e.g., `gdb`, `lldb`, `debugpy`, `js-debug`, `go`, `chrome`, `netcoredbg`). |
+| `request` | `string` | `"launch"` or `"attach"`. |
+| `command` | `string \| string[]` | The program or command to run (primarily for `launch`). |
+| `cwd` | `string` | Working directory. Defaults to `${wsdir}` if not specified. |
+| `env` | `table<string, string>` | Environment variables for the debuggee process. |
+| `stop_on_entry` | `boolean` | Whether to break immediately at the entry point. |
+| `run_in_terminal` | `boolean` | Run the debuggee in an integrated terminal. |
+| `processId` | `number \| string` | PID for attaching (supports macros like `${select-pid}`). |
+| `host` | `string` | Hostname/IP for remote debugging. |
+| `port` | `number \| string` | Port for remote debugging or inspector protocols. |
+| `debug_options` | `table` | Flexible table for debugger-specific settings. |
+
 
 All fields support [loop.nvim macros](https://github.com/mbfoss/loop.nvim) (e.g. `${file}`, `${wsdir}`, `${prompt:...}`, `${select-pid}`).
 

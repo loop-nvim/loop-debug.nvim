@@ -3,24 +3,59 @@ local M = {}
 local strtools = require('loop.tools.strtools')
 local config = require("loop-debug.config")
 
-
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
 ---@field ws_dir string
 
+---@class loopdebug.Config.Debugger.HookContext
+---@field task loopdebug.Task
+---@field ws_dir string
+---@field adapter_config loopdebug.AdapterConfig
+---@field page_group any
+---@field exit_code number|nil
+---@field user_data table
+
+---@class loopdebug.Config.Debugger
+---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
+---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
+---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
+---@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
+---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
+---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
+
+--------------------------------------------------------------------------------
+-- Internal Helpers
+--------------------------------------------------------------------------------
+
+-- Keys that the user should NOT be able to override because they are
+-- derived from the task's top-level fields or internal adapter logic.
+local _protected_keys = {
+    request = true,
+    type = true,
+    program = true,
+    args = true,
+    cwd = true,
+    processId = true,
+    host = true,
+    port = true,
+}
+
 ---@param task loopdebug.Task
+---@return string|nil
 local function get_task_program(task)
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
     return cmdparts[1]
 end
 
 ---@param task loopdebug.Task
+---@return string[]
 local function get_task_args(task)
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
     return { unpack(cmdparts, 2) }
 end
 
----@param to_merge {string:string}?
+---@param to_merge table<string, string>?
+---@return table<string, string>
 local function _merge_env(to_merge)
     local env = {}
     for k, v in pairs(vim.fn.environ() or {}) do
@@ -34,29 +69,15 @@ local function _merge_env(to_merge)
     return env
 end
 
----@class loopdebug.Config.Debugger.HookContext
----@field task loopdebug.Task
----@field ws_dir string
----@field adapter_config loopdebug.AdapterConfig
----@field page_group loop.PageGroup
----@field exit_code number|nil
----@field user_data any
-
----@class loopdebug.Config.Debugger
----@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
----@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
----@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
----@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
----@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
----@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
-
 ---@param context loopdebug.TaskContext
+---@return string
 local function _get_task_cwd(context)
     local task = context.task
     return (task and task.cwd) or context.ws_dir
 end
 
-
+---@param name string
+---@return string
 local function mason_bin(name)
     local ok, mason_registry = pcall(require, "mason-registry")
     if not ok then return name end
@@ -65,12 +86,9 @@ local function mason_bin(name)
     if not (pkg_ok and pkg:is_installed()) then
         return name
     end
-    -- Verified: pkg.spec.install_path is the raw string path
-    -- where the package is located.
     local path = pkg.spec.install_path
     if not path then return name end
     local bin_path = vim.fs.joinpath(path, "bin", name)
-    -- Check for Windows executable if needed
     if vim.fn.has("win32") == 1 then
         bin_path = bin_path .. ".exe"
     end
@@ -81,6 +99,27 @@ local function mason_bin(name)
     return name
 end
 
+---Merges user debug_options into the base config.
+---Allows overrides for most fields, but protects core DAP structural keys.
+---@param base table The internal/calculated DAP args
+---@param task loopdebug.Task The task containing user-defined debug_options
+---@return table
+local function _merge_debug_options(base, task)
+    local opts = vim.deepcopy(base)
+    if task.debug_options and type(task.debug_options) == "table" then
+        for k, v in pairs(task.debug_options) do
+            if not _protected_keys[k] then
+                opts[k] = v
+            end
+        end
+    end
+    return opts
+end
+
+--------------------------------------------------------------------------------
+-- Debugger Definitions
+--------------------------------------------------------------------------------
+
 ---@type table<string,loopdebug.Config.Debugger>
 local _debuggers = {}
 
@@ -88,7 +127,7 @@ local _debuggers = {}
 local _user_debuggers = {}
 
 -- ==================================================================
--- Lua (Local/Remote)
+-- Lua
 -- ==================================================================
 _debuggers.lua = {
     adapter_config = function(ctx)
@@ -96,16 +135,13 @@ _debuggers.lua = {
             "extension", "extension", "debugAdapter.js")
         ---@diagnostic disable-next-line: undefined-field
         if not vim.uv.fs_stat(adapter_path) then
-            return nil, ("local-lua-debugger-vscode debug adapter not found in Mason packages (%s)"):format(adapter_path)
+            return nil, ("local-lua-debugger-vscode debug adapter not found (%s)"):format(adapter_path)
         end
         return {
             adapter_id = "lua",
             name = "Local Lua Debugger",
             type = "executable",
-            command = {
-                "node",
-                adapter_path,
-            },
+            command = { "node", adapter_path },
             env = _merge_env({
                 LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
                     "extension", "debugger", "?.lua") .. ";;"
@@ -113,7 +149,7 @@ _debuggers.lua = {
         }
     end,
     launch_args = function(context)
-        return {
+        return _merge_debug_options({
             type = "lua-local",
             request = "launch",
             name = "Debug",
@@ -123,7 +159,7 @@ _debuggers.lua = {
                 file = get_task_program(context.task),
                 communication = 'stdio',
             },
-        }
+        }, context.task)
     end,
 }
 
@@ -138,20 +174,18 @@ _debuggers["lua:remote"] = {
         }
     end,
     attach_args = function(context)
-        local task = context.task
-        return {
+        return _merge_debug_options({
             request = "attach",
             type = "lua",
             host = context.task.host or "127.0.0.1",
             port = tonumber(context.task.port),
             cwd = _get_task_cwd(context),
-            stopOnEntry = false,
-        }
+        }, context.task)
     end,
 }
 
 -- ==================================================================
--- C / C++ / Rust (LLDB)
+-- LLDB (lldb-dap)
 -- ==================================================================
 _debuggers.lldb = {
     adapter_config = function()
@@ -164,27 +198,25 @@ _debuggers.lldb = {
     end,
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stopOnEntry or false,
-            runInTerminal = task.runInTerminal ~= false,
-            initCommands = task.initCommands,
-        }
+            stopOnEntry = task.stop_on_entry or false,
+            runInTerminal = task.run_in_terminal ~= false,
+        }, task)
     end,
     attach_args = function(context)
-        local task = context.task
-        return {
-            pid = tonumber(task.processId),
-            program = type(context.task.command) == "string" and context.task.command,
-        }
+        return _merge_debug_options({
+            pid = tonumber(context.task.processId),
+            program = type(context.task.command) == "string" and context.task.command or nil,
+        }, context.task)
     end,
 }
 
 -- ==================================================================
--- C / C++ / Rust (codelldb) with Dynamic Port
+-- codelldb
 -- ==================================================================
 _debuggers.codelldb = {
     adapter_config = function()
@@ -197,7 +229,7 @@ _debuggers.codelldb = {
     end,
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             name = "Launch (codelldb)",
             type = "codelldb",
             request = "launch",
@@ -205,39 +237,30 @@ _debuggers.codelldb = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stopOnEntry or false,
-            -- Integrated terminal is usually best for LLDB
-            runInTerminal = task.runInTerminal ~= false,
-            -- Enables pretty-printing for Rust/C++
-            sourceLanguages = task.sourceLanguages, -- example { "cpp", "rust" },
-            -- This allows the debugger to find source files if paths are relative
-            sourceMap = task.sourceMap,
-        }
+            stopOnEntry = task.stop_on_entry or false,
+            runInTerminal = task.run_in_terminal ~= false,
+        }, task)
     end,
     attach_args = function(context)
-        local task = context.task
-        return {
+        return _merge_debug_options({
             name = "Attach (codelldb)",
             type = "codelldb",
             request = "attach",
-            pid = tonumber(task.processId),
-            program = type(context.task.command) == "string" and context.task.command,
-            stopOnEntry = false,
-        }
+            pid = tonumber(context.task.processId),
+        }, context.task)
     end,
 }
 
 -- ==================================================================
--- C / C++ / Rust (GDB)
+-- GDB
 -- ==================================================================
 _debuggers.gdb = {
     adapter_config = function()
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
         local command = { "gdb", "--interpreter=dap" }
-        -- Only add -ix <file> if it exists
         ---@diagnostic disable-next-line: undefined-field
-        if vim.loop.fs_stat(gdbinit_path) then
+        if vim.uv.fs_stat(gdbinit_path) then
             table.insert(command, "-ix")
             table.insert(command, gdbinit_path)
         end
@@ -248,34 +271,29 @@ _debuggers.gdb = {
             command = command,
         }
     end,
-
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
-            runInTerminal = task.runInTerminal ~= false,
-        }
+            stopAtBeginningOfMainSubprogram = task.stop_on_entry or false,
+            runInTerminal = task.run_in_terminal ~= false,
+        }, task)
     end,
-
     attach_args = function(context)
-        local task = context.task
-        return {
+        return _merge_debug_options({
             request = "attach",
-            pid = tonumber(task.processId),
-            program = type(context.task.command) == "string" and context.task.command,
+            pid = tonumber(context.task.processId),
             cwd = _get_task_cwd(context),
-        }
+        }, context.task)
     end,
 }
 
 -- ==================================================================
 -- JavaScript / TypeScript (js-debug)
 -- ==================================================================
-
 _debuggers["js-debug"] = {
     start_hook = function(context, callback)
         local task = context.task
@@ -345,14 +363,14 @@ _debuggers["js-debug"] = {
             name = "js-debug",
             type = "server",
             host = context.task.host or "::1",
-            port = tonumber(context.task.port) or 0, -- Fallback to 0 if not yet set by hook
+            port = tonumber(context.task.port) or 0,
             cwd = _get_task_cwd(context),
         }
     end,
 
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             type = "pwa-node",
             request = "launch",
             runtimeExecutable = "node",
@@ -360,24 +378,18 @@ _debuggers["js-debug"] = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stopOnEntry or false,
-            sourceMaps = task.sourceMaps ~= false,
-        }
+            stopOnEntry = task.stop_on_entry or false,
+        }, task)
     end,
 
     attach_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             type = "pwa-node",
             request = "attach",
-            address = task.address or "127.0.0.1",
-            port = task.port or 0,
+            port = tonumber(task.port) or 0,
             cwd = _get_task_cwd(context),
-            restart = task.restart ~= false,
-            localRoot = task.cwd or _get_task_cwd(context),
-            remoteRoot = task.remoteRoot or "/app",
-            skipFiles = { "<node_internals>/**", "node_modules/**" },
-        }
+        }, task)
     end,
 }
 
@@ -385,24 +397,18 @@ _debuggers["js-debug"] = {
 -- Python (debugpy)
 -- ==================================================================
 _debuggers.debugpy = {
-
     adapter_config = function()
         local function python_bin()
-            local mason_path = vim.fn.stdpath("data") .. "/mason/packages/debugpy/venv/bin/python"
+            local mason_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "debugpy", "venv", "bin",
+                "python")
             if vim.fn.has("win32") == 1 then
-                mason_path = vim.fn.stdpath("data") .. "/mason/packages/debugpy/venv/Scripts/python.exe"
+                mason_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "debugpy", "venv", "Scripts",
+                    "python.exe")
             end
             ---@diagnostic disable-next-line: undefined-field
-            if vim.uv.fs_stat(mason_path) then
-                return mason_path
-            end
-            -- fallback to system python3
+            if vim.uv.fs_stat(mason_path) then return mason_path end
             local sys_py = vim.fn.exepath("python3")
-            if sys_py ~= "" then
-                return sys_py
-            end
-            -- final fallback
-            return "python"
+            return sys_py ~= "" and sys_py or "python"
         end
 
         return {
@@ -414,15 +420,13 @@ _debuggers.debugpy = {
     end,
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            stopOnEntry = false,
-            justMyCode = task.justMyCode ~= false,
-            console = "integratedTerminal",
             env = _merge_env(task.env),
-        }
+            console = "integratedTerminal",
+        }, task)
     end,
 }
 
@@ -438,14 +442,13 @@ _debuggers["debugpy:remote"] = {
     end,
     attach_args = function(context)
         local task = context.task
-        return {
-            justMyCode = task.justMyCode ~= nil and task.justMyCode or false,
+        return _merge_debug_options({
             request = "attach",
             connect = {
                 host = context.task.host or "127.0.0.1",
                 port = tonumber(context.task.port),
             }
-        }
+        }, task)
     end,
 }
 
@@ -463,23 +466,23 @@ _debuggers.go = {
     end,
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             mode = "debug",
             program = task.cwd or _get_task_cwd(context),
             env = _merge_env(task.env),
             dlvToolPath = mason_bin("delve"),
-        }
+        }, task)
     end,
     attach_args = function(context)
-        return {
+        return _merge_debug_options({
             mode = "local",
             processId = context.task.processId,
-        }
+        }, context.task)
     end,
 }
 
 -- ==================================================================
--- Other Languages (Chrome, Bash, PHP, Java, NetCore)
+-- Other (Chrome, Bash, PHP, Java, NetCore)
 -- ==================================================================
 _debuggers.chrome = {
     adapter_config = function()
@@ -491,24 +494,19 @@ _debuggers.chrome = {
         }
     end,
     launch_args = function(context)
-        local task = context.task
-        return {
+        return _merge_debug_options({
             type = "chrome",
             request = "launch",
-            url = task.url or "http://localhost:3000",
-            webRoot = task.cwd or _get_task_cwd(context),
-            sourceMaps = task.sourceMaps ~= false,
-            userDataDir = task.userDataDir ~= false,
-        }
+            webRoot = context.task.cwd or _get_task_cwd(context),
+        }, context.task)
     end,
     attach_args = function(context)
-        local task = context.task
-        return {
+        return _merge_debug_options({
             type = "chrome",
             request = "attach",
-            port = task.port or 9222,
-            webRoot = task.cwd or _get_task_cwd(context),
-        }
+            port = tonumber(context.task.port) or 9222,
+            webRoot = context.task.cwd or _get_task_cwd(context),
+        }, context.task)
     end,
 }
 
@@ -522,27 +520,32 @@ _debuggers.bash = {
         }
     end,
     launch_args = function(context)
-        local bashdb_path = function()
-            local path = vim.fn.stdpath("data") .. "/mason/opt/bashdb/bashdb"
-            ---@diagnostic disable-next-line: undefined-field
-            if vim.uv.fs_stat(path) then
-                return path
-            end
-            return "bashdb"
+        local task = context.task
+        local mason_opt_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "opt", "bashdb")
+        local bashdb_exe = vim.fs.joinpath(mason_opt_path, "bashdb")
+        local bashdb_lib = vim.fs.joinpath(mason_opt_path)
+        local final_args = get_task_args(task) or {}
+        local path_to_bashdb = "bashdb"
+        ---@diagnostic disable-next-line: undefined-field
+        if vim.uv.fs_stat(bashdb_exe) then
+            path_to_bashdb = bashdb_exe
         end
-        return {
+        return _merge_debug_options({
             name = "Launch Bash Script",
             type = "bashdb",
-            program = get_task_program(context.task),
+            request = "launch",
+            program = get_task_program(task),
+            args = final_args,
             cwd = _get_task_cwd(context),
             pathBash = "bash",
-            pathBashdb = bashdb_path(),
+            pathBashdb = path_to_bashdb,
+            pathBashdbLib = bashdb_lib,
             pathCat = "cat",
             pathMkfifo = "mkfifo",
             pathPkill = "pkill",
-            env = _merge_env(context.task.env),
+            env = _merge_env(task.env),
             terminalKind = "integrated",
-        }
+        }, task)
     end,
 }
 
@@ -557,13 +560,12 @@ _debuggers.php = {
     end,
     launch_args = function(context)
         local task = context.task
-        return {
+        return _merge_debug_options({
             name = "Listen for Xdebug",
             type = "php",
             request = "launch",
-            port = task.port or 9003,
-            pathMappings = task.pathMappings or { ["/var/www/html"] = task.cwd or _get_task_cwd(context) },
-        }
+            port = tonumber(task.port) or 9003,
+        }, task)
     end,
 }
 
@@ -578,11 +580,11 @@ _debuggers.java = {
         }
     end,
     attach_args = function(context)
-        return {
+        return _merge_debug_options({
             request = "attach",
             host = context.task.host or "127.0.0.1",
             port = tonumber(context.task.port),
-        }
+        }, context.task)
     end,
 }
 
@@ -597,42 +599,38 @@ _debuggers.netcoredbg = {
         }
     end,
     launch_args = function(context)
-        return {
+        return _merge_debug_options({
             type = "coreclr",
             request = "launch",
-            program = type(context.task.command) == "string" and context.task.command,
+            program = type(context.task.command) == "string" and context.task.command or nil,
             env = _merge_env(context.task.env),
-        }
+        }, context.task)
     end,
     attach_args = function(context)
-        return {
+        return _merge_debug_options({
             type = "coreclr",
             request = "attach",
             processId = tonumber(context.task.processId),
-        }
+        }, context.task)
     end,
 }
 
----@retun string[]
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+---@return string[]
 function M.debugger_names()
     local names = {}
-    for name, _ in pairs(_user_debuggers) do
-        names[name] = true
-    end
-    for name, _ in pairs(_debuggers) do
-        names[name] = true
-    end
+    for name, _ in pairs(_user_debuggers) do names[name] = true end
+    for name, _ in pairs(_debuggers) do names[name] = true end
     return vim.fn.sort(vim.tbl_keys(names))
 end
 
 ---@param name string
 ---@return loopdebug.Config.Debugger?
 function M.get_debugger(name)
-    local user_debugger = _user_debuggers[name]
-    if user_debugger then
-        return user_debugger
-    end
-    return _debuggers[name]
+    return _user_debuggers[name] or _debuggers[name]
 end
 
 ---@param name string
@@ -640,7 +638,7 @@ end
 ---@param debugger_config loopdebug.Config.Debugger
 function M.register_debugger(name, based_on, debugger_config)
     local base_debugger = _debuggers[based_on]
-    assert(base_debugger, "Invalid base debugger name: " .. tostring(base_debugger))
+    assert(base_debugger, "Invalid base debugger name: " .. tostring(based_on))
     local new_debugger = vim.fn.deepcopy(base_debugger)
     _user_debuggers[name] = vim.tbl_extend('force', new_debugger, debugger_config)
 end

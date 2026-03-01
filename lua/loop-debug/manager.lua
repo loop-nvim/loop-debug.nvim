@@ -207,16 +207,31 @@ local function _switch_to_thread(thread_id, send_updates)
     if not thread_id or not sess_data then return end
 
     -- 3. Async Fetch: Get top stack frame
+    local process_stackdata = function(stackdata)
+        local topframe = stackdata and stackdata.stackFrames and stackdata.stackFrames[1]
+        if topframe then
+            _set_frame_silent(topframe)
+            _report_current_view("thread")
+        end
+    end
+
     local ctx = _get_context()
     sess_data.data_providers.stack_provider({ threadId = thread_id, levels = 1 }, function(err, data)
         -- Validate context hasn't changed while we were waiting
-        if _is_current_context(ctx, "thread") then
-            local topframe = data and data.stackFrames and data.stackFrames[1]
-            if topframe then
-                _set_frame_silent(topframe)
-                _report_current_view("thread")
-            end
+        if not _is_current_context(ctx, "thread") then return end
+        if data then
+            process_stackdata(data)
+            return
         end
+        -- some adapters need some delay
+        vim.defer_fn(function()
+            if not _is_current_context(ctx, "thread") then return end
+            sess_data.data_providers.stack_provider({ threadId = thread_id, levels = 1 },
+                function(err1, data1)
+                    if not _is_current_context(ctx, "thread") then return end
+                    process_stackdata(data1)
+                end)
+        end, 500)
     end)
 end
 

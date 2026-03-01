@@ -16,7 +16,6 @@ function M.get_task_type_provider(ext_data)
             return run.start_debug_task(ext_data.ws_dir, task, page_group, on_exit)
         end,
         on_tasks_cleanup = function()
-            --ui.hide()
         end,
     }
 end
