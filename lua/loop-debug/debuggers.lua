@@ -16,6 +16,7 @@ local config = require("loop-debug.config")
 ---@field user_data table
 
 ---@class loopdebug.Config.Debugger
+---@field language string
 ---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
@@ -27,8 +28,6 @@ local config = require("loop-debug.config")
 -- Internal Helpers
 --------------------------------------------------------------------------------
 
--- Keys that the user should NOT be able to override because they are
--- derived from the task's top-level fields or internal adapter logic.
 local _protected_keys = {
     request = true,
     type = true,
@@ -99,10 +98,8 @@ local function mason_bin(name)
     return name
 end
 
----Merges user debug_options into the base config.
----Allows overrides for most fields, but protects core DAP structural keys.
----@param base table The internal/calculated DAP args
----@param task loopdebug.Task The task containing user-defined debug_options
+---@param base table
+---@param task loopdebug.Task
 ---@return table
 local function _merge_debug_options(base, task)
     local opts = vim.deepcopy(base)
@@ -125,11 +122,11 @@ local _debuggers = {}
 
 ---@type table<string,loopdebug.Config.Debugger>
 local _user_debuggers = {}
-
 -- ==================================================================
--- Lua
+-- lua
 -- ==================================================================
-_debuggers.lua = {
+_debuggers["local-lua-debugger"] = {
+    language = "lua",
     adapter_config = function(ctx)
         local adapter_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
             "extension", "extension", "debugAdapter.js")
@@ -138,7 +135,7 @@ _debuggers.lua = {
             return nil, ("local-lua-debugger-vscode debug adapter not found (%s)"):format(adapter_path)
         end
         return {
-            adapter_id = "lua",
+            adapter_id = "local-lua-debugger-vscode",
             name = "Local Lua Debugger",
             type = "executable",
             command = { "node", adapter_path },
@@ -163,10 +160,11 @@ _debuggers.lua = {
     end,
 }
 
-_debuggers["lua:remote"] = {
+_debuggers["osv"] = {
+    language = "lua",
     adapter_config = function(context)
         return {
-            adapter_id = "lua",
+            adapter_id = "lua-remote-debugger",
             name = "Lua Remote Debugger",
             type = "server",
             host = context.task.host or "127.0.0.1",
@@ -185,12 +183,13 @@ _debuggers["lua:remote"] = {
 }
 
 -- ==================================================================
--- LLDB (lldb-dap)
+-- c, cpp, rust (lldb)
 -- ==================================================================
 _debuggers.lldb = {
+    language = "c, cpp, rust",
     adapter_config = function()
         return {
-            adapter_id = "lldb",
+            adapter_id = "lldb-dap",
             name = "LLDB (via lldb-dap)",
             type = "executable",
             command = { mason_bin("lldb-dap") },
@@ -216,9 +215,10 @@ _debuggers.lldb = {
 }
 
 -- ==================================================================
--- codelldb
+-- c, cpp, rust (codelldb)
 -- ==================================================================
 _debuggers.codelldb = {
+    language = "c, cpp, rust",
     adapter_config = function()
         return {
             adapter_id = "codelldb",
@@ -252,9 +252,10 @@ _debuggers.codelldb = {
 }
 
 -- ==================================================================
--- GDB
+-- c, cpp, rust (gdb)
 -- ==================================================================
 _debuggers.gdb = {
+    language = "c, cpp, rust",
     adapter_config = function()
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
@@ -292,9 +293,10 @@ _debuggers.gdb = {
 }
 
 -- ==================================================================
--- JavaScript / TypeScript (js-debug)
+-- javascript, typescript
 -- ==================================================================
 _debuggers["js-debug"] = {
+    language = "javascript, typescript",
     start_hook = function(context, callback)
         local task = context.task
         local port = (type(task.port) == "number" and task.port) or 0
@@ -359,7 +361,7 @@ _debuggers["js-debug"] = {
 
     adapter_config = function(context)
         return {
-            adapter_id = "js-debug",
+            adapter_id = "js-debug-adapter",
             name = "js-debug",
             type = "server",
             host = context.task.host or "::1",
@@ -394,9 +396,10 @@ _debuggers["js-debug"] = {
 }
 
 -- ==================================================================
--- Python (debugpy)
+-- python
 -- ==================================================================
 _debuggers.debugpy = {
+    language = "python",
     adapter_config = function()
         local function python_bin()
             local mason_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "debugpy", "venv", "bin",
@@ -431,6 +434,7 @@ _debuggers.debugpy = {
 }
 
 _debuggers["debugpy:remote"] = {
+    language = "python",
     adapter_config = function(context)
         return {
             adapter_id = "debugpy",
@@ -453,12 +457,13 @@ _debuggers["debugpy:remote"] = {
 }
 
 -- ==================================================================
--- Go (delve)
+-- go
 -- ==================================================================
-_debuggers.go = {
+_debuggers["delve"] = {
+    language = "go",
     adapter_config = function()
         return {
-            adapter_id = "go",
+            adapter_id = "delve",
             name = "Delve (dlv)",
             type = "executable",
             command = { mason_bin("delve"), "dap", "-l", "127.0.0.1:0" },
@@ -482,12 +487,13 @@ _debuggers.go = {
 }
 
 -- ==================================================================
--- Other (Chrome, Bash, PHP, Java, NetCore)
+-- javascript (chrome)
 -- ==================================================================
-_debuggers.chrome = {
+_debuggers["chrome-debug-adapter"] = {
+    language = "javascript",
     adapter_config = function()
         return {
-            adapter_id = "chrome",
+            adapter_id = "chrome-debug-adapter",
             name = "Chrome",
             type = "executable",
             command = { mason_bin("chrome-debug-adapter") },
@@ -510,10 +516,14 @@ _debuggers.chrome = {
     end,
 }
 
-_debuggers.bash = {
+-- ==================================================================
+-- bash
+-- ==================================================================
+_debuggers["bash-debug-adapter"] = {
+    language = "bash",
     adapter_config = function()
         return {
-            adapter_id = "bash",
+            adapter_id = "bash-debug-adapter",
             name = "bashdb",
             type = "executable",
             command = { mason_bin("bash-debug-adapter") },
@@ -549,11 +559,15 @@ _debuggers.bash = {
     end,
 }
 
-_debuggers.php = {
+-- ==================================================================
+-- php
+-- ==================================================================
+_debuggers["php-debug-adapter"] = {
+    language = "php",
     adapter_config = function()
         return {
-            adapter_id = "php",
-            name = "PHP Debug (vscode-php-debug)",
+            adapter_id = "php-debug-adapter",
+            name = "vscode-php-debug",
             type = "executable",
             command = { mason_bin("php-debug") },
         }
@@ -569,11 +583,15 @@ _debuggers.php = {
     end,
 }
 
-_debuggers.java = {
+-- ==================================================================
+-- java
+-- ==================================================================
+_debuggers["java-debug-server"] = {
+    language = "java",
     adapter_config = function(context)
         return {
-            adapter_id = "java",
-            name = "Java (jdtls)",
+            adapter_id = "jds",
+            name = "java-debug-server",
             type = "server",
             host = context.task.host or "127.0.0.1",
             port = tonumber(context.task.port),
@@ -588,7 +606,11 @@ _debuggers.java = {
     end,
 }
 
+-- ==================================================================
+-- csharp, fsharp
+-- ==================================================================
 _debuggers.netcoredbg = {
+    language = "csharp, fsharp",
     adapter_config = function()
         return {
             adapter_id = "netcoredbg",
@@ -619,12 +641,16 @@ _debuggers.netcoredbg = {
 -- Public API
 --------------------------------------------------------------------------------
 
----@return string[]
-function M.debugger_names()
-    local names = {}
-    for name, _ in pairs(_user_debuggers) do names[name] = true end
-    for name, _ in pairs(_debuggers) do names[name] = true end
-    return vim.fn.sort(vim.tbl_keys(names))
+---@return {string:string}
+function M.debuggers_summary()
+    local summary = {}
+    for id, data in pairs(_user_debuggers) do
+        summary[id] = data.language or ""
+    end
+    for id, data in pairs(_debuggers) do
+        summary[id] = data.language or ""
+    end
+    return summary
 end
 
 ---@param name string

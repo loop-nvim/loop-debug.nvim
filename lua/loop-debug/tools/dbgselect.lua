@@ -11,16 +11,19 @@ function M.select(callback, data, path)
             cur_debugger = current
         end
     end
+    local summary = debuggers.debuggers_summary()
     ---@type loop.SelectorItem
     local choices = {}
     local initial
-    for _, name in ipairs(debuggers.debugger_names()) do
+    for _, debugger_id in ipairs(vim.fn.sort(vim.tbl_keys(summary))) do
+        local language = summary[debugger_id]
+        local annotation = (language and language ~= debugger_id) and ("(%s)"):format(language) or nil
         table.insert(choices,
             {
-                label = name,
-                data = name,
+                label_chunks = annotation and  {{debugger_id}, {" "}, {annotation, "keyword"}} or {{debugger_id}},
+                data = debugger_id,
             })
-        if cur_debugger == name then
+        if cur_debugger == debugger_id then
             initial = #choices
         end
     end
