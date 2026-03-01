@@ -6,7 +6,8 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field name string
 ---@field data_providers loopdebug.session.DataProviders
 ---@field state string
----@field nb_paused_threads number
+---@field is_paused boolean
+---@field nb_paused_threads number?
 
 ---@alias loopdebug.events.ViewUpdateTrigger "session"|"thread"|"frame"|"variable"
 
@@ -17,8 +18,8 @@ local Trackers  = require("loop.tools.Trackers")
 ---@field session_name string?
 ---@field data_providers loopdebug.session.DataProviders?
 ---@field thread_id number|nil
----@field thread_name string|nil
 ---@field frame loopdebug.proto.StackFrame|nil
+---@field spurious_pause boolean?
 
 ---@class loopdebug.events.Tracker
 ---@field on_debug_start fun()?

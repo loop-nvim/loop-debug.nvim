@@ -20,12 +20,15 @@
 ---@field variable_value string
 
 ---@class loop-debug.Config
+---@field auto_switch_page? boolean
 ---@field stack_levels_limit? number
 ---@field anti_flicker_delay? number
+---@field debug_line_blend_color? number
 ---@field enable_inlay_variables? boolean
 ---@field sign_priority? loop-debug.Config.SignPriority
 ---@field symbols? loop-debug.Config.Symbols
 ---@field debuggers? table<string,loopdebug.Config.Debugger>
+---@field enable_dap_log boolean?
 
 local M = {}
 

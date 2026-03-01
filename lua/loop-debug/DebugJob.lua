@@ -1,5 +1,6 @@
 local class            = require('loop.tools.class')
 local Session          = require('loop-debug.dap.Session')
+local config           = require("loop-debug.config")
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -39,6 +40,7 @@ local Session          = require('loop-debug.dap.Session')
 ---@field session loopdebug.Session
 ---@field repl_ctrl loop.ReplController?
 ---@field debuggee_output_ctrl loop.OutputBufferController?
+---@field dap_log_ctrl loop.OutputBufferController?
 
 ---@class loop.job.DebugJob
 ---@field new fun(self: loop.job.DebugJob, name:string, page_group:loop.PageGroup) : loop.job.DebugJob
@@ -76,6 +78,7 @@ end
 ---@class loop.DebugJob.StartArgs
 ---@field name string
 ---@field debug_args loopdebug.session.DebugArgs
+---@field enable_dap_log boolean
 
 ---Starts a new terminal job.
 ---@param args loop.DebugJob.StartArgs
@@ -84,6 +87,7 @@ end
 function DebugJob:start(args, tracker)
     assert(#self._session_data == 0 and not self._tracker, "already started")
     self._tracker = tracker
+    self._enable_dap_log = args.enable_dap_log
     local ok, err = self:_add_new_session(args.name, args.debug_args)
     return ok, err
 end
@@ -115,6 +119,7 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         debug_args = debug_args,
         tracker = tracker,
         exit_handler = exit_handler,
+        enable_dap_log_events = self._enable_dap_log,
     }
 
     -- start new session
@@ -141,12 +146,13 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
         session:set_source_breakpoint(bp)
     end
 
-    self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
-
     local started, start_err = session:start(session_args)
     if not started then
         return false, "Failed to start debug session, " .. start_err
     end
+    -- report start after session:start to avoid infinite "starting" status on error
+    -- should:start() should not call any callback inside the start() itself
+    self._tracker.on_sess_added(session_id, name, parent_sess_id, controller, data_providers)
 
     self:_setup_repl(session_id, name, controller, data_providers)
 
@@ -155,13 +161,9 @@ end
 
 ---@param bp loopdebug.SourceBreakpoint
 function DebugJob:update_breakpoint(bp)
-    if bp.enabled then
-        self._breakpoints[bp.id] = bp
-        for _, data in pairs(self._session_data) do
-            data.session:set_source_breakpoint(bp)
-        end
-    else
-        self:remove_breakpoint(bp)
+    self._breakpoints[bp.id] = bp
+    for _, data in pairs(self._session_data) do
+        data.session:set_source_breakpoint(bp)
     end
 end
 
@@ -259,6 +261,10 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
         -- not needed for now
         return
     end
+    if event == "dap_log" then
+        self:_add_dap_log(sess_id, session:name(), event_data.msg, event_data.inbound)
+        return
+    end
     vim.notify("LoopDebug: unhandled dap session event: " .. event)
 end
 
@@ -280,10 +286,9 @@ function DebugJob:add_debug_term(sess_id, name, args, on_success, on_failure)
     local start_args = { name = name, command = args.args, env = args.env, cwd = args.cwd, on_exit_handler = function() end }
     local pd, err = self._page_group.add_page({
         type = "term",
-        buftype = "loopdebug-term",
         label = "Output",
         term_args = start_args,
-        activate = true
+        activate = config.current.auto_switch_page,
     })
     if pd and pd.term_proc then on_success(pd.term_proc:get_pid()) else on_failure(err or "term startup error") end
 end
@@ -332,7 +337,6 @@ function DebugJob:_setup_repl(sesion_id, session_name, controller, data_provider
     -- Setup REPL
     local page_data = self._page_group.add_page({
         type = "repl",
-        buftype = "loopdebug-repl",
         label = "Console",
         activate = false
     })
@@ -396,7 +400,13 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
 
     -- Process Output
     if not sess_data.debuggee_output_ctrl then
-        local page_data = self._page_group.add_page({ buftype = "loopdebug-output", type = "output", label = "Output", activate = true })
+        local page_data = self._page_group.add_page({
+            type = "output",
+            label =
+            "Output",
+            activate =
+                config.current.auto_switch_page
+        })
         if page_data then
             sess_data.debuggee_output_ctrl = page_data.output_buf
         end
@@ -409,6 +419,26 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
                 sess_data.debuggee_output_ctrl.add_lines(line)
             end
         end
+    end
+end
+
+---@param sess_id number
+---@param sess_name string
+---@param msg string
+---@param inbound boolean
+function DebugJob:_add_dap_log(sess_id, sess_name, msg, inbound)
+    ---@type loopdebug.DebugJob.SessionData?
+    local sess_data = self._session_data[sess_id]
+    if not sess_data then return end
+    if not sess_data.dap_log_ctrl then
+        local page_data = self._page_group.add_page({ type = "output", label = "DAP log" })
+        if page_data then
+            sess_data.dap_log_ctrl = page_data.output_buf
+        end
+    end
+    if sess_data.dap_log_ctrl then
+        local prefix = inbound and "recv: " or "send: "
+        sess_data.dap_log_ctrl.add_lines(prefix .. msg)
     end
 end
 

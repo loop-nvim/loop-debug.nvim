@@ -90,19 +90,19 @@ local function _save_layout()
 
     -- Compute total height and current height ratios
     local total_lines = 0
-    local current_ratios = {}
+    local height_ratios = {}
     for i, win in ipairs(windows) do
         if vim.api.nvim_win_is_valid(win) then
             local h = vim.api.nvim_win_get_height(win)
             total_lines = total_lines + h
-            current_ratios[i] = h
+            height_ratios[i] = h
         else
             return
         end
     end
 
-    for i, h in ipairs(current_ratios) do
-        current_ratios[i] = h / total_lines
+    for i, h in ipairs(height_ratios) do
+        height_ratios[i] = h / total_lines
     end
 
     -- Compute current width ratio for the first window
@@ -112,32 +112,10 @@ local function _save_layout()
         width_ratio = vim.api.nvim_win_get_width(first_win) / vim.o.columns
     end
 
-    -- Load previously saved layout
-    local saved = persistence.get_config("layout") or {}
-    local epsilon = 1.2 / vim.o.lines
-
-    local ratios_changed = false
-    if saved.height_ratios then
-        for i, r in ipairs(current_ratios) do
-            if math.abs(r - (saved.height_ratios[i] or 0)) > epsilon then
-                ratios_changed = true
-                break
-            end
-        end
-    else
-        ratios_changed = true
-    end
-
-    local width_changed = math.abs(width_ratio - (saved.width_ratio or 0)) > epsilon
-
-    -- Only save if something meaningful changed
-    if ratios_changed or width_changed then
-        persistence.set_config("layout", {
-            total_lines = total_lines,
-            height_ratios = current_ratios,
-            width_ratio = width_ratio,
-        })
-    end
+    local config = persistence.get_config("layout") or {}
+    config.height_ratios = height_ratios
+    config.width_ratio = width_ratio
+    persistence.set_config("layout", config)
 end
 
 -- Apply saved layout, scaling heights if total height changed
@@ -155,6 +133,20 @@ local function _apply_layout()
     end
 
     local saved = persistence.get_config("layout") or {}
+
+    local first_win = windows[1]
+    if first_win then
+        local width_ratio =
+            saved.width_ratio
+            or _window_defs[1].default_width_ratio
+            or 0.50
+
+        vim.api.nvim_win_set_width(
+            first_win,
+            math.floor(width_ratio * vim.o.columns)
+        )
+    end
+
     local height_ratios = saved.height_ratios or {}
 
     -- Compute new heights for each window
@@ -212,29 +204,8 @@ local function _create_components(windows)
     end
 end
 
-local function _on_resize()
-    local windows = get_managed_windows()
-    if #windows ~= #_window_defs then
-        return
-    end
-
-    local wins = vim.v.event.windows
-    if wins and #windows > 0 then
-        local ours_only = true
-        for _, win in ipairs(wins) do
-            if not vim.tbl_contains(windows, win) then
-                ours_only = false
-                break
-            end
-        end
-        if ours_only then
-            _save_layout()
-        else
-            vim.defer_fn(function()
-                _apply_layout()
-            end, 0)
-        end
-    end
+function M.save_layout()
+    _save_layout()
 end
 
 -- ======================================
@@ -253,25 +224,11 @@ function M.show()
         return
     end
 
-    local saved = persistence.get_config("layout") or {}
-
-    local width_ratio =
-        saved.width_ratio
-        or _window_defs[1].default_width_ratio
-        or 0.50
-
-    local height_ratios = saved.heights or {}
-
     local original_win = vim.api.nvim_get_current_win()
 
     -- Create vertical container (first window)
     vim.cmd("topleft 1vsplit")
     local first_win = vim.api.nvim_get_current_win()
-
-    vim.api.nvim_win_set_width(
-        first_win,
-        math.floor(width_ratio * vim.o.columns)
-    )
 
     local windows = {}
     table.insert(windows, first_win)
@@ -281,21 +238,6 @@ function M.show()
         vim.cmd("below 1split")
         local win = vim.api.nvim_get_current_win()
         table.insert(windows, win)
-    end
-
-    -- Apply height ratios for first N-1 windows
-    for i = 1, (#windows - 1) do
-        local ratio =
-            height_ratios[i]
-            or _window_defs[i].default_height_ratio
-
-        if ratio then
-            vim.api.nvim_set_current_win(windows[i])
-            vim.api.nvim_win_set_height(
-                windows[i],
-                math.floor(ratio * vim.o.lines)
-            )
-        end
     end
 
     -- Configure windows
@@ -311,22 +253,23 @@ function M.show()
     for i, def in ipairs(_window_defs) do
         local winid = windows[i]
         vim.api.nvim_set_option_value('winfixwidth', true, { scope = 'local', win = winid })
+        vim.api.nvim_set_option_value('winfixheight', true, { scope = 'local', win = winid })
     end
 
     if vim.api.nvim_win_is_valid(original_win) then
         vim.api.nvim_set_current_win(original_win)
     end
 
-    _create_components(windows)
-
     _apply_layout()
+
+    _create_components(windows)
 
     -- Resize tracking
     vim.api.nvim_clear_autocmds({ group = _ui_auto_group })
-    vim.api.nvim_create_autocmd("WinResized", {
+    vim.api.nvim_create_autocmd("VimResized", {
         group = _ui_auto_group,
         callback = function()
-            _on_resize()
+            _apply_layout()
         end,
     })
 end

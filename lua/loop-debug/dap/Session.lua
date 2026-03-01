@@ -231,6 +231,14 @@ function Session:start(args)
         end
     end
 
+    ---@type fun(msg:string,inbound:boolean)?
+    local dap_log_handler
+    if args.enable_dap_log_events then
+        dap_log_handler = function(msg, inbound)
+            args.tracker(self, "dap_log", { msg = msg, inbound = inbound })
+        end
+    end
+
     local start_ok, start_err
     if adapter.type ~= "server" then
         local cmd_and_args = strtools.cmd_to_string_array(adapter.command)
@@ -260,6 +268,7 @@ function Session:start(args)
                 dap_cwd = adapter.cwd,
                 on_stderr = stderr_handler,
                 on_exit = exit_handler,
+                dap_log_handler = dap_log_handler,
             })
         end)
     else
@@ -277,6 +286,7 @@ function Session:start(args)
                 dap_port = adapter.port,
                 on_stderr = stderr_handler,
                 on_exit = exit_handler,
+                dap_log_handler = dap_log_handler,
             })
         end)
     end
@@ -357,6 +367,7 @@ end
 ---@param breakpoint loopdebug.SourceBreakpoint
 function Session:set_source_breakpoint(breakpoint)
     self:remove_breakpoint(breakpoint.id)
+    if not breakpoint.enabled then return end
     local data = self._source_breakpoints
     ---@type loopdebug.session.SourceBPData
     local pbdata = { user_data = breakpoint, verified = false, dap_id = nil }
@@ -460,7 +471,7 @@ function Session:debug_continue(thread_id, all_threads)
             ---@type loopdebug.session.notify.ThreadsEventScope
             local data = {
                 thread_id = thread_id,
-                all_thread = all_threads,
+                all_threads = all_threads,
             }
             self:_notify_tracker("threads_continued", data)
         end)
@@ -596,7 +607,8 @@ function Session:_on_stopped_event(event)
     ---@type loopdebug.session.notify.ThreadsEventScope
     local data = {
         thread_id = event.threadId,
-        all_thread = event.allThreadsStopped,
+        all_threads = event.allThreadsStopped,
+        reason = event.reason,
     }
     self:_notify_tracker("threads_paused", data)
 end
@@ -613,7 +625,7 @@ function Session:_on_continued_event(event)
     ---@type loopdebug.session.notify.ThreadsEventScope
     local data = {
         thread_id = event.threadId,
-        all_thread = event.allThreadsContinued,
+        all_threads = event.allThreadsContinued,
     }
     self:_notify_tracker("threads_continued", data)
 end
@@ -724,9 +736,7 @@ function Session:_on_initializing_state()
             self._fsm:trigger(fsmdata.trigger.initialize_resp_err)
             return
         end
-        if self._args.debug_args.launch_post_configure ~= true then
-            self._fsm:trigger(fsmdata.trigger.start_before_initialized)
-        end
+        self._fsm:trigger(fsmdata.trigger.start)
     end
 
     self:_send_initialize(function(success)

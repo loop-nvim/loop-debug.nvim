@@ -80,7 +80,9 @@ local function _start_debug_job(args, page_group, startup_callback, exit_handler
         return startup_callback(nil, err or "failed to start debug job")
     end
 
-    require('loop-debug.ui').show()
+    vim.schedule(function()
+        require('loop-debug.ui').show()
+    end)
 
     -- Success!
     startup_callback(job, nil)
@@ -169,6 +171,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     ---@type loop.DebugJob.StartArgs
     local start_args = {
         name = task.name,
+        enable_dap_log = (config.current.enable_dap_log ~= false),
         debug_args = {
             adapter = adapter_config,
             request = task.request,

@@ -35,6 +35,9 @@ local function _debug_commands(args)
             "enable", "disable", "toggle_enabled", "disable_all", "enable_all",
             "delete", "clear_file", "clear_all" }
     end
+    if #args == 1 and args[1] == "ui" then
+        return { "show", "hide", "toggle", "save_layout" }
+    end
     return {}
 end
 
@@ -48,7 +51,18 @@ end
 local function _do_command(args, opts, wsdir)
     local cmd = args[1]
     if cmd == "ui" then
-        debugui.toggle()
+        local sub_cmd = args[2]
+        if not sub_cmd or sub_cmd == "" or sub_cmd == "toggle" then
+            debugui.toggle()
+        elseif sub_cmd == "show" then
+            debugui.show()
+        elseif sub_cmd == "hide" then
+            debugui.hide()
+        elseif sub_cmd == "save_layout" then
+            debugui.save_layout()
+        else
+            vim.notify("Invalid Debug UI command: " .. tostring(sub_cmd))
+        end
         return
     end
     manager.debug_command(cmd, args, opts, wsdir)

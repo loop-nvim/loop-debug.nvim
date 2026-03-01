@@ -27,7 +27,7 @@ local function _item_formatter(id, data)
     table.insert(chunks, { tostring(frame.name), "@function" })
 
     if frame.source and frame.source.name then
-        table.insert(chunks, { " - " })  -- separator before dash
+        table.insert(chunks, { " - " }) -- separator before dash
         table.insert(chunks, { tostring(frame.source.name), "@module" })
 
         if frame.line then
@@ -107,9 +107,15 @@ end
 
 ---@param view loopdebug.events.CurrentViewUpdate
 function StackTrace:_update_data(view)
+    if self._antiflicker_timer and self._antiflicker_timer:is_active() then
+        self._antiflicker_timer:stop()
+        self._antiflicker_timer:close()
+        self._antiflicker_timer = nil
+    end
     if not view.thread_id then
         --defer to avoid flickering
-        vim.defer_fn(function()
+        self._antiflicker_timer = vim.defer_fn(function()
+                self._antiflicker_timer = nil
                 local items = self:get_items()
                 for _, item in ipairs(items) do
                     if item.data.greyout_pending then
@@ -124,7 +130,6 @@ function StackTrace:_update_data(view)
         for _, item in ipairs(items) do
             item.data.greyout_pending = true
         end
-        self:refresh_content()
         return
     end
     local sequence = view.sequence
@@ -137,7 +142,7 @@ function StackTrace:_update_data(view)
             if not resp then return end
             local cur_item_id = nil
             if sequence ~= self._current_seqnum then return end
-            local text = "Thread: " .. (view.thread_name or tostring(view.thread_id))
+            local text = "Thread: " .. tostring(view.thread_id)
             local items = { {
                 id = 0,
                 data = { text = text }

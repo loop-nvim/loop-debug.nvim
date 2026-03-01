@@ -1,4 +1,5 @@
 local strtools = require('loop.tools.strtools')
+local config = require("loop-debug.config")
 
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
@@ -6,14 +7,12 @@ local strtools = require('loop.tools.strtools')
 
 ---@param task loopdebug.Task
 local function get_task_program(task)
-    if task.program then return task.program end
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
     return cmdparts[1]
 end
 
 ---@param task loopdebug.Task
 local function get_task_args(task)
-    if task.args then return task.args end
     local cmdparts = strtools.cmd_to_string_array(task.command or "")
     return { unpack(cmdparts, 2) }
 end
@@ -31,7 +30,6 @@ end
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
----@field launch_post_configure nil|boolean|nil|fun(ctx:loopdebug.TaskContext):boolean
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
 
@@ -176,8 +174,8 @@ debuggers.lldb = {
     attach_args = function(context)
         local task = context.task
         return {
-            pid = tonumber(task.pid),
-            program = get_task_program(task) or task.program,
+            pid = tonumber(task.processId),
+            program = type(context.task.command) == "string" and context.task.command,
         }
     end,
 }
@@ -219,9 +217,53 @@ debuggers.codelldb = {
             name = "Attach (codelldb)",
             type = "codelldb",
             request = "attach",
-            pid = tonumber(task.pid),
-            program = get_task_program(task) or task.program,
+            pid = tonumber(task.processId),
+            program = type(context.task.command) == "string" and context.task.command,
             stopOnEntry = false,
+        }
+    end,
+}
+
+-- ==================================================================
+-- C / C++ / Rust (GDB)
+-- ==================================================================
+debuggers.gdb = {
+    adapter_config = function()
+        local home = os.getenv("HOME")
+        return {
+            adapter_id = "gdb",
+            name = "GDB (via DAP)",
+            type = "executable",
+            command = { "gdb", "--interpreter=dap", "-ix", vim.fs.joinpath(vim.env.HOME or "~", ".gdbinit") },
+        }
+    end,
+
+    launch_args = function(context)
+        local task = context.task
+        local env = task.env
+        if not env or next(env) == nil then
+            env = vim.fn.environ()
+            if not env or next(env) == nil then
+                env = nil
+            end
+        end
+        return {
+            program = get_task_program(task),
+            args = get_task_args(task),
+            cwd = _get_task_cwd(context),
+            env = env,
+            stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
+            runInTerminal = task.runInTerminal ~= false,
+        }
+    end,
+
+    attach_args = function(context)
+        local task = context.task
+        return {
+            request = "attach",
+            pid = tonumber(task.processId),
+            program = type(context.task.command) == "string" and context.task.command,
+            cwd = _get_task_cwd(context),
         }
     end,
 }
@@ -272,10 +314,9 @@ debuggers["js-debug"] = {
         }
         local page_data, page_err = context.page_group.add_page({
             type = "term",
-            buftype = "loopdebug-term",
             label = "Debug Server",
             term_args = args,
-            activate = true,
+            activate = config.current.auto_switch_page,
         })
         if not page_data then
             callback(false, page_err)
@@ -311,8 +352,8 @@ debuggers["js-debug"] = {
             type = "pwa-node",
             request = "launch",
             runtimeExecutable = "node",
-            program = get_task_program(task) or task.program,
-            args = get_task_args(task) or task.args,
+            program = get_task_program(task),
+            args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = task.env,
             stopOnEntry = task.stopOnEntry or false,
@@ -420,7 +461,7 @@ debuggers.go = {
     launch_args = function(context)
         local task = context.task
         return {
-            mode = task.mode or "debug",
+            mode = "debug",
             program = task.cwd or _get_task_cwd(context),
             env = task.env,
             dlvToolPath = mason_bin("delve"),
@@ -428,7 +469,7 @@ debuggers.go = {
     end,
     attach_args = function(context)
         return {
-            mode = context.task.mode or "local",
+            mode = "local",
             processId = context.task.processId,
         }
     end,
@@ -548,7 +589,7 @@ debuggers.netcoredbg = {
         return {
             type = "coreclr",
             request = "launch",
-            program = context.task.program,
+            program = type(context.task.command) == "string" and context.task.command,
             env = context.task.env,
         }
     end,

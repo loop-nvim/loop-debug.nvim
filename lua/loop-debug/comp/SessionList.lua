@@ -14,14 +14,12 @@ local function _item_formatter(id, data)
     ---@type loopdebug.events.SessionInfo
     local name = data.name
     local state = data.state
-    local nb_paused_threads = data.nb_paused_threads
+    local is_paused = data.is_paused
 
     local symbols = config.current.symbols
     assert(symbols)
 
     local chunks = {}
-    local nb_paused = nb_paused_threads or 0
-    local is_paused = nb_paused > 0
 
     table.insert(chunks, {
         is_paused and symbols.paused or symbols.running,
@@ -34,18 +32,11 @@ local function _item_formatter(id, data)
     })
     if state and state ~= "running" then
         table.insert(chunks, { " ", nil })
-        table.insert(chunks, {
-            state,
-            "DiagnosticInfo",
-        })
+        table.insert(chunks, { ("[%s]"):format(state), "DiagnosticInfo", })
     end
-    if nb_paused > 0 then
-        local s = nb_paused > 1 and "s" or ""
+    if is_paused then
         table.insert(chunks, { " ", nil })
-        table.insert(chunks, {
-            string.format("[%d paused thread%s]", nb_paused, s),
-            "Comment",
-        })
+        table.insert(chunks, { "[paused]", "DiagnosticInfo" })
     end
     return chunks
 end
@@ -78,22 +69,31 @@ function SessionListComp:init()
             self:_refresh()
         end,
         on_session_update = function(id, info)
-            local timer = self._deferred_update_timers[id]
-            if timer and timer:is_active() then
-                timer:stop()
-                timer:close()
+            -- cancel any existing deferred timer for this session
+            local prev_timer = self._deferred_update_timers[id]
+            if prev_timer then
+                prev_timer:stop()
+                prev_timer:close()
+                self._deferred_update_timers[id] = nil
             end
-            self._deferred_update_timers[id] = nil
-            local nb_paused = info.nb_paused_threads or 0
-            if nb_paused > 0 then
+            if info.is_paused then
+                -- immediate update for paused sessions
                 self._sessions[id] = info
                 self:_refresh()
             else
-                self._deferred_update_timers[id] = vim.defer_fn(function()
-                        self._sessions[id] = info
-                        self:_refresh()
-                    end,
-                    config.current.anti_flicker_delay)
+                -- schedule deferred update for running sessions
+                local timer
+                timer = vim.defer_fn(function()
+                    -- make sure the timer is still registered (hasn't been canceled)
+                    if self._deferred_update_timers[id] ~= timer then
+                        return
+                    end
+                    self._sessions[id] = info
+                    self:_refresh()
+                    self._deferred_update_timers[id] = nil
+                end, config.current.anti_flicker_delay)
+                -- store timer handle immediately for future cancellation
+                self._deferred_update_timers[id] = timer
             end
         end,
         on_session_removed = function(id)
@@ -120,8 +120,8 @@ function SessionListComp:dispose()
     for _, timer in pairs(self._deferred_update_timers) do
         if timer:is_active() then
             timer:stop()
+            timer:close()
         end
-        timer:close()
     end
     self._deferred_update_timers = {}
 end
@@ -149,11 +149,10 @@ function SessionListComp:_refresh()
         --@type loop.pages.ItemListPage.Item
         local item = {
             id = sess_id,
-            ---@class loopdebug.mgr.TaskPageItemData
             data = {
                 name = info.name,
                 state = info.state,
-                nb_paused_threads = info.nb_paused_threads,
+                is_paused = info.is_paused,
             }
         }
         table.insert(list_items, item)

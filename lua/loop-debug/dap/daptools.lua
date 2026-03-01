@@ -1,5 +1,35 @@
 local M = {}
 
+-- reasons that represent REAL execution stops
+-- anything not in this set will be treated as spurious
+local _non_spurious_stop_reasons = {
+    ["step"] = true,
+    ["breakpoint"] = true,
+    ["exception"] = true,
+    ["pause"] = true,
+    ["entry"] = true,
+    ["goto"] = true,
+    ["function breakpoint"] = true,
+    ["data breakpoint"] = true,
+    ["instruction breakpoint"] = true,
+}
+
+---Returns true if stop should be treated as spurious
+---@param reason string|nil
+---@return boolean
+function M.is_spurious_stop(reason)
+    -- No reason? Treat as spurious (defensive default)
+    if type(reason) ~= "string" then
+        return true
+    end
+    -- If it's explicitly known to be a real stop → not spurious
+    if _non_spurious_stop_reasons[reason] then
+        return false
+    end
+    -- Everything else (including "function call") → spurious
+    return true
+end
+
 --- Format a DAP error body into a human-readable string
 --- @param body table|nil  DAP response body
 --- @return string|nil

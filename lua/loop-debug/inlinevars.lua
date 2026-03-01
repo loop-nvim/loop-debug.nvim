@@ -58,17 +58,6 @@ local function _set_file_extmark(id, filepath, line, col, opts)
     )
 end
 
-
-local function _deferred_remove_locals_virttext()
-    if not _vars_clear_timer then
-        _vars_clear_timer = vim.defer_fn(function()
-                _vars_clear_timer = nil
-                _remove_extmarks()
-            end,
-            config.current.anti_flicker_delay)
-    end
-end
-
 local function _cancel_deferred_remove_locals_virttext()
     if _vars_clear_timer and _vars_clear_timer:is_active() then
         _vars_clear_timer:stop()
@@ -77,6 +66,16 @@ local function _cancel_deferred_remove_locals_virttext()
     end
 end
 
+local function _deferred_remove_locals_virttext()
+    _cancel_deferred_remove_locals_virttext()
+    if not _vars_clear_timer then
+        _vars_clear_timer = vim.defer_fn(function()
+                _vars_clear_timer = nil
+                _remove_extmarks()
+            end,
+            config.current.anti_flicker_delay)
+    end
+end
 
 ---@param node TSNode
 ---@param row integer

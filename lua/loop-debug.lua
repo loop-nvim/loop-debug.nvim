@@ -12,6 +12,7 @@ local config = require("loop-debug.config")
 local DEFAULT_CONFIG = {
     stack_levels_limit = 100,
     auto_switch_page = true,
+    debug_line_blend_color = 0xD65A5A,
     anti_flicker_delay = 500,
     enable_inlay_variables = true,
     sign_priority = {

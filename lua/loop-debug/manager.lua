@@ -11,25 +11,20 @@ local M             = {}
 -- Type Definitions
 -- =============================================================================
 
----@class loopdebug.mgr.Context
+---@class loopdebug.mgr.ContextData
 ---@field session_ctx number The global session context counter
 ---@field pause_ctx number   The pause state context counter for the current session
 ---@field thread_ctx number  The thread selection context counter
 ---@field frame_ctx number   The stack frame selection context counter
-
----@class loopdebug.mgr.InSessionCtx
----@field pause_ctx number
----@field thread_ctx number
----@field frame_ctx number
-
+---@
 ---@class loopdebug.mgr.SessionData
 ---@field sess_name string|nil
 ---@field state string|nil
 ---@field controller loop.job.DebugJob.SessionController
 ---@field data_providers loopdebug.session.DataProviders
----@field context_keys loopdebug.mgr.InSessionCtx
+---@field all_threads_paused boolean
+---@field spurious_pause boolean
 ---@field paused_threads table<number, boolean> Set of paused thread IDs
----@field thread_names table<number, string> Map of thread ID to name
 ---@field cur_thread_id number|nil Currently selected thread
 ---@field cur_frame loopdebug.proto.StackFrame|nil Currently selected stack frame
 ---@field debuggee_output_ctrl loop.OutputBufferController|nil
@@ -37,14 +32,19 @@ local M             = {}
 ---@alias loopdebug.mgr.JobCommandFn fun(cmd:loop.job.DebugJob.Command):boolean,(string|nil)
 
 ---@class loopdebug.mgr.ManagerData
----@field session_ctx number
+---@field context_data loopdebug.mgr.ContextData
 ---@field view_update_seq number
 ---@field current_session_id number|nil
 ---@field session_data table<number, loopdebug.mgr.SessionData>
 
 ---@type loopdebug.mgr.ManagerData
 local _manager_data = {
-    session_ctx = 1,
+    context_data = {
+        session_ctx = 1,
+        thread_ctx = 1,
+        frame_ctx = 1,
+        pause_ctx = 1,
+    },
     view_update_seq = 0,
     session_data = {}
 }
@@ -53,70 +53,44 @@ local _manager_data = {
 -- Context Management
 -- =============================================================================
 
----Builds a snapshot of the current context state to validate async callbacks.
----@return loopdebug.mgr.Context
-local function _build_context()
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    local sess_ctx = sess_data and sess_data.context_keys or nil
-    ---@type loopdebug.mgr.Context
-    local ctx = {
-        session_ctx = mgr_data.session_ctx,
-        pause_ctx = sess_ctx and sess_ctx.pause_ctx or 0,
-        thread_ctx = sess_ctx and sess_ctx.thread_ctx or 0,
-        frame_ctx = sess_ctx and sess_ctx.frame_ctx or 0,
-    }
-    return ctx
+---@return loopdebug.mgr.ContextData
+local function _get_context()
+    return vim.fn.deepcopy(_manager_data.context_data)
 end
-
 ---Increments the context counter for a specific level, invalidating previous async requests.
 ---@param level "session"|"pause"|"thread"|"frame"
 local function _increment_context(level)
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-
+    local ctx = _manager_data.context_data
     if level == "session" then
-        mgr_data.session_ctx = mgr_data.session_ctx + 1
-    elseif sess_data then
-        local ctx = sess_data.context_keys
-        if level == "pause" then
-            ctx.pause_ctx = ctx.pause_ctx + 1
-        elseif level == "thread" then
-            ctx.thread_ctx = ctx.thread_ctx + 1
-        elseif level == "frame" then
-            ctx.frame_ctx = ctx.frame_ctx + 1
-        end
+        ctx.session_ctx = ctx.session_ctx + 1
+    elseif level == "pause" then
+        ctx.pause_ctx = ctx.pause_ctx + 1
+    elseif level == "thread" then
+        ctx.thread_ctx = ctx.thread_ctx + 1
+    elseif level == "frame" then
+        ctx.frame_ctx = ctx.frame_ctx + 1
     end
 end
 
 ---Checks if the context snapshot matches the current state.
----@param ctx loopdebug.mgr.Context The snapshot to check
+---@param ctx loopdebug.mgr.ContextData The snapshot to check
 ---@param level "session"|"pause"|"thread"|"frame" The level of granularity to check
 ---@return boolean
 local function _is_current_context(ctx, level)
-    local mgr_data = _manager_data
-    local sess_id = mgr_data.current_session_id
-    local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    local cur_ctx = sess_data and sess_data.context_keys or nil
+    local cur_ctx = _manager_data.context_data
 
     if level == "session" then
-        return ctx.session_ctx == mgr_data.session_ctx
-    end
-
-    -- For all other levels, we need active session data
-    if not cur_ctx or ctx.session_ctx ~= mgr_data.session_ctx then
-        return false
-    end
-
-    if level == "pause" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+    elseif level == "pause" then
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
     elseif level == "thread" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
             and ctx.thread_ctx == cur_ctx.thread_ctx
     elseif level == "frame" then
-        return ctx.pause_ctx == cur_ctx.pause_ctx
+        return ctx.session_ctx == cur_ctx.session_ctx
+            and ctx.pause_ctx == cur_ctx.pause_ctx
             and ctx.thread_ctx == cur_ctx.thread_ctx
             and ctx.frame_ctx == cur_ctx.frame_ctx
     end
@@ -152,8 +126,8 @@ local function _report_current_view(trigger)
         session_name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
         thread_id = sess_data.cur_thread_id,
-        thread_name = sess_data.thread_names[sess_data.cur_thread_id],
-        frame = sess_data.cur_frame
+        frame = sess_data.cur_frame,
+        spurious_pause = sess_data.spurious_pause,
     })
 end
 
@@ -165,12 +139,16 @@ local function _report_session_update(sess_id)
     if not sess_data then return end
 
     local state = sess_data.state or "starting"
-    local nb_paused_threads = vim.tbl_count(sess_data.paused_threads)
-
+    local is_paused = sess_data.all_threads_paused or next(sess_data.paused_threads) ~= nil
+    local nb_paused_threads
+    if is_paused and not sess_data.all_threads_paused then
+        vim.tbl_count(sess_data.paused_threads)
+    end
     debugevents.report_session_update(sess_id, {
         name = sess_data.sess_name,
         data_providers = sess_data.data_providers,
         state = state,
+        is_paused = is_paused,
         nb_paused_threads = nb_paused_threads
     })
 end
@@ -188,11 +166,10 @@ local function _set_frame_silent(frame)
 end
 
 ---Internal helper: Sets the current thread without triggering side effects.
----@param sess_id number
 ---@param thread_id number?
-local function _set_thread_silent(sess_id, thread_id)
+local function _set_thread_silent(thread_id)
     local mgr_data = _manager_data
-    local sess_data = mgr_data.session_data[sess_id]
+    local sess_data = mgr_data.session_data[mgr_data.current_session_id]
     if not sess_data then return end
 
     _increment_context("thread")
@@ -214,15 +191,15 @@ local function _switch_to_frame(frame, send_updates)
 end
 
 ---Switches the active thread, optionally fetches the stack, and updates UI.
----@param sess_id number
 ---@param thread_id number?
 ---@param send_updates boolean
-local function _switch_to_thread(sess_id, thread_id, send_updates)
+local function _switch_to_thread(thread_id, send_updates)
     local mgr_data = _manager_data
+    local sess_data = mgr_data.session_data[_manager_data.current_session_id]
+    if not sess_data then return end
 
     -- 1. Update internal state immediately
-    _set_thread_silent(sess_id, thread_id)
-    local sess_data = mgr_data.session_data[sess_id]
+    _set_thread_silent(thread_id)
 
     -- 2. Report initial view (thread changed, frame empty)
     if send_updates then _report_current_view("thread") end
@@ -230,7 +207,7 @@ local function _switch_to_thread(sess_id, thread_id, send_updates)
     if not thread_id or not sess_data then return end
 
     -- 3. Async Fetch: Get top stack frame
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.stack_provider({ threadId = thread_id, levels = 1 }, function(err, data)
         -- Validate context hasn't changed while we were waiting
         if _is_current_context(ctx, "thread") then
@@ -245,58 +222,20 @@ end
 
 ---Switches the active session and handles thread synchronization on pause.
 ---@param sess_id number?
----@param thread_pause_evt loopdebug.session.notify.ThreadsEventScope? If provided, syncs threads
-local function _switch_to_session(sess_id, thread_pause_evt)
+---@param thread_id number?
+local function _switch_to_session(sess_id, thread_id)
     _increment_context("session")
 
     local mgr_data = _manager_data
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
-    if not sess_id or not sess_data then
+    if not sess_data then
         mgr_data.current_session_id = nil
         _report_current_view("session")
         return
     end
 
     mgr_data.current_session_id = sess_id
-
-    -- Determine target thread
-    local thread_id = thread_pause_evt and thread_pause_evt.thread_id or sess_data.cur_thread_id
-
-    -- If this is a pause event, we need to sync the thread list first
-    if thread_pause_evt then
-        local ctx = _build_context()
-        sess_data.data_providers.threads_provider(function(err, resp)
-            -- Validate pause context matches
-            if not _is_current_context(ctx, "pause") then return end
-
-            if err or not resp or not resp.threads then
-                vim.notify("Failed to load thread list - " .. (err or ""))
-            else
-                -- Update thread names and paused state
-                sess_data.thread_names = {}
-                if thread_pause_evt.all_thread then
-                    sess_data.paused_threads = {}
-                end
-
-                for _, thread in pairs(resp.threads) do
-                    sess_data.thread_names[thread.id] = thread.name
-                    if thread_pause_evt.all_thread then
-                        sess_data.paused_threads[thread.id] = true
-                    end
-                end
-
-                if not thread_pause_evt.all_thread then
-                    sess_data.paused_threads[thread_pause_evt.thread_id] = true
-                end
-
-                _report_session_update(sess_id)
-                _switch_to_thread(sess_id, thread_id, true)
-            end
-        end)
-    else
-        -- Just a session switch, simply switch to its last known thread
-        _switch_to_thread(sess_id, thread_id, true)
-    end
+    _switch_to_thread(thread_id or sess_data.cur_thread_id, true)
 end
 
 -- =============================================================================
@@ -323,7 +262,7 @@ function M.add_session(sess_id,
         name = sess_name,
         data_providers = data_providers,
         state = "starting",
-        nb_paused_threads = 0,
+        is_paused = false,
     })
 
     ---@type loopdebug.mgr.SessionData
@@ -331,9 +270,9 @@ function M.add_session(sess_id,
         sess_name = sess_name,
         controller = controller,
         data_providers = data_providers,
-        context_keys = { pause_ctx = 1, thread_ctx = 1, frame_ctx = 1 },
+        all_threads_paused = false,
+        spurious_pause = false,
         paused_threads = {},
-        thread_names = {}
     }
 
     _manager_data.session_data[sess_id] = session_data
@@ -381,9 +320,20 @@ end
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
 function M.on_session_thread_pause(sess_id, sess_name, event_data)
-    if not _manager_data.session_data[sess_id] then return end
-    -- Switch session handles the context update, thread syncing, and reporting
-    _switch_to_session(sess_id, event_data)
+    local sess_data = _manager_data.session_data[sess_id]
+    if not sess_data then return end
+    -- If the adapter says 'all stopped', we can assume the whole process is halted
+    if event_data.all_threads then
+        sess_data.all_threads_paused = true
+    end
+    -- Always track the specific thread that hit the signal
+    if event_data.thread_id then
+        sess_data.paused_threads[event_data.thread_id] = true
+    end
+    local is_spurious = daptools.is_spurious_stop(event_data.reason)
+    sess_data.spurious_pause = is_spurious
+    _report_session_update(sess_id)
+    _switch_to_session(sess_id, event_data.thread_id)
 end
 
 ---@param sess_id number
@@ -394,16 +344,22 @@ function M.on_session_thread_continue(sess_id, sess_name, event_data)
     local sess_data = mgr_data.session_data[sess_id]
     if not sess_data then return end
 
-    if event_data.all_thread then
-        _increment_context("pause")
+    if event_data.all_threads then
+        -- Hard Reset: Everything is moving
+        sess_data.all_threads_paused = false
         sess_data.paused_threads = {}
-        _switch_to_thread(sess_id, nil, true)
     else
-        _increment_context("thread")
+        -- Single thread continued
         sess_data.paused_threads[event_data.thread_id] = nil
-        -- Only switch away if the CONTINUED thread was the ACTIVE thread
-        if sess_data.cur_thread_id == event_data.thread_id then
-            _switch_to_thread(sess_id, nil, true)
+        -- If a single thread starts, 'all_threads_paused' cannot logically remain true.
+        sess_data.all_threads_paused = false
+    end
+    -- Handle UI Context Invalidation
+    if sess_id == mgr_data.current_session_id then
+        -- If the thread we were looking at is the one that started moving...
+        if event_data.all_threads or event_data.thread_id == sess_data.cur_thread_id then
+            _increment_context("pause")  -- Kill pending async requests
+            _switch_to_thread(nil, true) -- Clear the view
         end
     end
     _report_session_update(sess_id)
@@ -452,20 +408,24 @@ local function _process_select_session_command()
     local mgr_data = _manager_data
     local choices = {}
     local initial
-    for sess_id, sess_data in pairs(mgr_data.session_data) do
+    local ids = vim.tbl_keys(mgr_data.session_data)
+    vim.fn.sort(ids)
+    for _, sess_id in ipairs(ids) do
+        local sess_data = mgr_data.session_data[sess_id]
         table.insert(choices, { label = sess_data.sess_name, data = sess_id })
         if sess_id == mgr_data.current_session_id then
             initial = #choices
         end
     end
     selector.select({
-        prompt = "Select debug session",
-        items = choices,
-        initial = initial,
-        callback = function(sess_id)
+            prompt = "Select debug session",
+            items = choices,
+            initial = initial,
+        },
+        function(sess_id)
             if sess_id then _switch_to_session(sess_id) end
         end
-    })
+    )
     return true
 end
 
@@ -476,7 +436,7 @@ local function _process_select_thread_command()
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
     if not sess_id or not sess_data then return false, "No active debug session" end
 
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.threads_provider(function(err, data)
         if _is_current_context(ctx, "pause") then
             if err or not data or not data.threads then
@@ -494,15 +454,16 @@ local function _process_select_thread_command()
                     end
                 end
                 selector.select({
-                    prompt = "Select thread",
-                    items = choices,
-                    initial = initial,
-                    callback = function(thread_id)
+                        prompt = "Select thread",
+                        items = choices,
+                        initial = initial,
+                    },
+                    function(thread_id)
                         if thread_id and sess_id == mgr_data.current_session_id then
-                            _switch_to_thread(sess_id, thread_id, true)
+                            _switch_to_thread(thread_id, true)
                         end
                     end
-                })
+                )
             end
         end
     end)
@@ -511,26 +472,6 @@ end
 
 ---@return boolean, string|nil
 local function _process_select_frame_command()
-    local format_frame = function(frame)
-        local chunks = {}
-        local max_namelen = math.max(2, math.floor(vim.o.columns / 2))
-        table.insert(chunks, { tostring(strtools.crop_string_for_ui(frame.name, max_namelen)) })
-        if frame.source and frame.source.name then
-            table.insert(chunks, { " - " })
-            table.insert(chunks, { tostring(frame.source.name), "@module" })
-
-            if frame.line then
-                table.insert(chunks, { ":" })
-                table.insert(chunks, { tostring(frame.line), "@number" })
-
-                if frame.column then
-                    table.insert(chunks, { ":" })
-                    table.insert(chunks, { tostring(frame.column), "@number" })
-                end
-            end
-        end
-        return chunks
-    end
     local mgr_data = _manager_data
     local sess_id = mgr_data.current_session_id
     local sess_data = sess_id and mgr_data.session_data[sess_id] or nil
@@ -539,16 +480,24 @@ local function _process_select_frame_command()
     local thread_id = sess_data.cur_thread_id
     if not thread_id then return false, "No selected thread" end
 
-    local ctx = _build_context()
+    local ctx = _get_context()
     sess_data.data_providers.stack_provider({ threadId = thread_id }, function(err, data)
         if _is_current_context(ctx, "thread") then
             if err or not data then
                 vim.notify("Failed to load call stack: " .. (err or ""))
             else
+                ---@type loop.SelectorItem[]
                 local choices = {}
                 local initial
                 for _, frame in pairs(data.stackFrames) do
-                    table.insert(choices, { label_chunks = format_frame(frame), data = frame })
+                    table.insert(choices,
+                        ---@type loop.SelectorItem
+                        {
+                            label = frame.name,
+                            file = frame.source and frame.source.path,
+                            lnum = frame.source and frame.line,
+                            data = frame
+                        })
                     if sess_data.cur_frame and frame.id == sess_data.cur_frame.id then
                         initial = #choices
                     end
@@ -563,15 +512,18 @@ local function _process_select_frame_command()
                     end
                 end
                 selector.select({
-                    prompt = "Select frame",
-                    items = choices,
-                    initial = initial,
-                    callback = function(frame)
+                        prompt = "Select frame",
+                        items = choices,
+                        initial = initial,
+                        file_preview = true,
+                        list_wrap = false,
+                    },
+                    function(frame)
                         if frame and sess_id == mgr_data.current_session_id and thread_id == sess_data.cur_thread_id then
                             _switch_to_frame(frame, true)
                         end
                     end
-                })
+                )
             end
         end
     end)
@@ -594,7 +546,7 @@ local function _process_inspect_var_command(opts)
     end
 
     local frame = sess_data.cur_frame
-    local ctx = _build_context()
+    local ctx = _get_context()
 
     sess_data.data_providers.evaluate_provider({
         expression = expr,

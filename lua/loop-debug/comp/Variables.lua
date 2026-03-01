@@ -10,11 +10,12 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field path string
 ---@field name string
 ---@field value string
----@field presentationHint loopdebug.proto.VariablePresentationHint
+---@field presentationHint loopdebug.proto.VariablePresentationHint?
 ---@field variablesReference number?
 ---@field evaluateName string?
 ---@field is_expr boolean?
 ---@field is_na boolean?
+---@field greyout_pending boolean?
 ---@field greyout boolean?
 ---@field scopelabel string?
 
@@ -25,6 +26,10 @@ local debugevents  = require('loop-debug.debugevents')
 ---@field sess_name string
 ---@field data_providers loopdebug.session.DataProviders
 ---@field frame loopdebug.proto.StackFrame
+
+---@class loopdebug.comp.Vars.Expression
+---@field id number
+---@field expr string
 
 ---@class loopdebug.comp.Variables : loop.comp.ItemTree
 ---@field new fun(self: loopdebug.comp.Variables): loopdebug.comp.Variables
@@ -53,51 +58,6 @@ local function _preview_string(str, max_len)
     preview = preview:sub(1, max_len)
     preview = preview:match("^%s*(.-)%s*$") -- trim
     return preview .. "…", true
-end
-
----@param expr string
----@return boolean
-local function _add_expr(expr)
-    if not persistence.is_ws_open() then return false end
-    local data = persistence.get_config("expr") or {}
-    ---@cast data string[]
-    for _, v in ipairs(data) do if v == expr then return false end end
-    table.insert(data, expr)
-    persistence.set_config("expr", data)
-    return true
-end
-
----@param old string
----@param new string
----@return boolean
-local function _reset_expr(old, new)
-    local data = persistence.get_config("expr")
-    if not data then return false end
-    ---@cast data string[]
-    for i, v in ipairs(data) do
-        if v == old then
-            data[i] = new
-            persistence.set_config("expr", data)
-            return true
-        end
-    end
-    return false
-end
-
----@param expr string
----@return boolean
-local function _remove_expr(expr)
-    local data = persistence.get_config("expr")
-    if not data then return false end
-    ---@cast data string[]
-    for i, v in ipairs(data) do
-        if v == expr then
-            table.remove(data, i)
-            persistence.set_config("expr", data)
-            return true
-        end
-    end
-    return false
 end
 
 ---@type table<string, string>
@@ -133,7 +93,7 @@ local function _variable_node_formatter(id, data)
 
     -- scope label (single segment)
     if data.scopelabel then
-        table.insert(text_chunks, { data.scopelabel, base_hl or "Directory" })
+        table.insert(text_chunks, { data.scopelabel, "Directory" })
         return text_chunks, virt_chunks
     end
 
@@ -170,7 +130,14 @@ function Variables:init()
         render_delay_ms = 200,
     })
 
+    ---@type loopdebug.comp.Vars.Expression[]
+    self._expressions = persistence.get_config("expr") or {}
+    ---@type table<string,boolean>
+    self._disabled_expressions = {}
+
     self._query_context = 0
+    self._spurious_pause_counter = 0
+
     ---@type loopdebug.events.CurrentViewUpdate|nil
     self._current_data_source = nil
     ---@type table<string, boolean>
@@ -206,30 +173,122 @@ function Variables:init()
         on_view_udpate = function(view)
             self._current_data_source = view
             self._query_context = self._query_context + 1
+            if view.spurious_pause then self._spurious_pause_counter = self._spurious_pause_counter + 1 end
             self:_update_data(self._query_context)
         end
     })
 
     ---@type loop.TrackerRef?
     self._persistence_tracker_ref = persistence.add_tracker({
-        on_ws_load = function() self:_update_data(self._query_context) end
+        on_ws_load = function()
+            self._expressions = persistence.get_config("expr") or {}
+            self._disabled_expressions = {}
+            self:_update_data(self._query_context)
+        end,
+        on_ws_will_save = function()
+            ---@type loopdebug.comp.Vars.Expression[]
+            persistence.set_config("expr", self._expressions)
+        end,
     })
+
+    self:_load_expressions(self._query_context)
+end
+
+---@param expr string
+---@return loopdebug.comp.Vars.Expression?
+function Variables:_add_expr(expr)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    local max_id = 1
+    for _, v in ipairs(data) do
+        max_id = math.max(max_id, v.id)
+    end
+    local new_id = max_id + 1
+    ---@type loopdebug.comp.Vars.Expression
+    local expr_obj = {
+        id = new_id,
+        expr = expr,
+    }
+    table.insert(data, expr_obj)
+
+    local root_id = self._expr_root_id
+    local item_id = root_id .. "/" .. tostring(expr_obj.id)
+    local existing_item = self:get_item(item_id)
+    if not existing_item then
+        local item_data = {
+            name = expr_obj.expr,
+            path = item_id,
+            is_expr = true,
+            expr_id = expr_obj.id,
+            is_na = true,
+            value = "not available"
+        }
+        ---@type loopdebug.comp.Variables.ItemDef
+        local item_def = {
+            id = item_id,
+            expanded = self._layout_cache[item_data.path],
+            data = item_data
+        }
+        self:add_item(root_id, item_def)
+    end
+
+    self:_load_expr_value(self._query_context, expr_obj)
+end
+
+---@param id number
+---@param old string
+---@param new string
+function Variables:_reset_expr(id, old, new)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    for _, expr_obj in ipairs(data) do
+        if expr_obj.id == id then
+            expr_obj.expr = new
+            self:_load_expr_value(self._query_context, expr_obj)
+            return
+        end
+    end
+end
+
+---@param id number
+function Variables:_remove_expr(id)
+    local data = self._expressions
+    ---@cast data loopdebug.comp.Vars.Expression[]
+    for i, expr_obj in ipairs(data) do
+        if expr_obj.id == id then
+            table.remove(data, i)
+            local root_id = self._expr_root_id
+            local item_id = root_id .. "/" .. tostring(expr_obj.id)
+            self:remove_item(item_id)
+            return
+        end
+    end
 end
 
 ---@param ctx number
 function Variables:_update_data(ctx)
+    if self._defer_greyout_timer then
+        self._defer_greyout_timer:stop()
+        self._defer_greyout_timer:close()
+        self._defer_greyout_timer = nil
+    end
     --defer to avoid flickering
-    vim.defer_fn(function()
-            local items = self:get_items()
-            for _, item in ipairs(items) do
-                if item.data.greyout_pending then
-                    item.data.greyout = true
-                    item.data.greyout_pending = false
-                end
+    local timer
+    timer = vim.defer_fn(function()
+        if self._defer_greyout_timer ~= timer then
+            return
+        end
+        self._defer_greyout_timer = nil
+        local items = self:get_items()
+        for _, item in ipairs(items) do
+            if item.data.greyout_pending then
+                item.data.greyout = true
+                item.data.greyout_pending = false
             end
-            self:refresh_content()
-        end,
-        config.current.anti_flicker_delay)
+        end
+        self:refresh_content()
+    end, config.current.anti_flicker_delay)
+    self._defer_greyout_timer = timer
 
     local items = self:get_items()
     for _, item in ipairs(items) do item.data.greyout_pending = true end
@@ -330,85 +389,152 @@ function Variables:_load_expressions(context)
     local root_id = self._expr_root_id
     local root_expanded = self._layout_cache[root_id]
     if root_expanded == nil then root_expanded = true end
-
-    self:upsert_item(nil,
-        { id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Expressions" } })
-
-    if not persistence.is_ws_open() then return end
-    local list = persistence.get_config("expr") or {}
-
-    for idx, expr in ipairs(list) do
-        local item_id = root_id .. "/" .. tostring(idx)
-        self:_load_expr_value(context, root_id, expr, item_id)
+    if not self:get_item(root_id) then
+        self:add_item(nil,
+            {
+                id = root_id,
+                expanded = root_expanded,
+                data = { path = root_id, scopelabel = "Expressions" }
+            })
     end
+
+    if not persistence.is_ws_open() then
+        self:remove_children(root_id)
+        return
+    end
+    do
+        local exr_names = {}
+        for _, expr_obj in ipairs(self._expressions) do
+            exr_names[expr_obj.expr] = true
+        end
+        local children = self:get_children(self._expr_root_id)
+        for _, child in ipairs(children) do
+            if not exr_names[child.data.name] then
+                self:remove_item(child.id)
+            end
+        end
+    end
+    for _, expr_obj in ipairs(self._expressions) do
+        local item_id = root_id .. "/" .. tostring(expr_obj.id)
+        local existing_item = self:get_item(item_id)
+        if not existing_item then
+            local item_data = {
+                name = expr_obj.expr,
+                path = item_id,
+                is_expr = true,
+                expr_id = expr_obj.id,
+                is_na = true,
+                value = "not available"
+            }
+            ---@type loopdebug.comp.Variables.ItemDef
+            local item_def = {
+                id = item_id,
+                expanded = self._layout_cache[item_data.path],
+                data = item_data
+            }
+            self:add_item(root_id, item_def)
+        end
+    end
+
+    local list = vim.fn.copy(persistence.get_config("expr") or {})
+    local load_next
+    load_next = function()
+        if #list == 0 then return end
+        local exprobj = table.remove(list, 1)
+        self:_load_expr_value(context, exprobj, function()
+            vim.schedule(function()
+                load_next()
+            end)
+        end)
+    end
+    load_next()
 end
 
 ---@param context number
----@param expr string
----@param item_id any
-function Variables:_load_expr_value(context, parent_id, expr, item_id)
-    local path = parent_id .. "/" .. expr
+---@param expr_obj loopdebug.comp.Vars.Expression
+---@param on_complete fun()?
+function Variables:_load_expr_value(context, expr_obj, on_complete)
+    assert(expr_obj.id and expr_obj.expr)
 
-    -- Check if we already have this item to preserve existing data during greyout
-    local existing = self:get_item(item_id)
 
-    ---@type loopdebug.comp.Variables.ItemDef
-    local var_item = {
-        id = item_id,
-        expanded = self._layout_cache[path],
-        data = existing and existing.data or
-            { path = path, is_expr = true, name = expr, is_na = true, value = "not available" }
-    }
+    if not persistence.is_ws_open() then return end
+    if self._query_context ~= context then return end
 
-    -- Ensure the name is correct if it was renamed
-    var_item.data.name = expr
+    local root_id = self._expr_root_id
+    if not self:get_item(root_id) then return end
 
-    self:upsert_item(parent_id, var_item)
+    local item_id = root_id .. "/" .. tostring(expr_obj.id)
+
+    local expr = expr_obj.expr
+    local existing_item = self:get_item(item_id)
+    if not existing_item then return end
+
+    ---@type loopdebug.comp.Variables.ItemData
+    local item_data = existing_item.data
+
+    item_data.name = expr_obj.expr
 
     local ds = self._current_data_source
-    if not ds or not ds.frame or not ds.data_providers then
+    if not expr or not ds or not ds.frame or not ds.data_providers then
         return
     end
 
+    if self._disabled_expressions[expr_obj.expr] then
+        item_data.is_na = true
+        item_data.value = "disabled"
+        item_data.greyout_pending = false
+        if on_complete then on_complete() end
+        return
+    end
+
+    local spurious_pause_counter = self._spurious_pause_counter
     ds.data_providers.evaluate_provider({
         expression = expr, frameId = ds.frame.id, context = "watch",
     }, function(err, data)
+        if spurious_pause_counter ~= self._spurious_pause_counter then
+            self._disabled_expressions[expr_obj.expr] = true
+            if on_complete then on_complete() end
+            return
+        end
         if self._query_context ~= context then return end
+        if not self:have_item(item_id) then return end
+        local children_callback
         if err or not data then
-            var_item.data.value = "not available"
-            var_item.data.is_na = true
-            var_item.data.greyout = false
-            var_item.data.greyout_pending = false
+            item_data.value = "not available"
+            item_data.is_na = true
+            item_data.greyout = false
+            item_data.greyout_pending = false
         else
-            var_item.data.value = data.result
-            var_item.data.presentationHint = data.presentationHint
-            var_item.data.is_na = false
-            var_item.data.greyout = false
-            var_item.data.greyout_pending = false
+            item_data.value = data.result
+            item_data.presentationHint = data.presentationHint
+            item_data.is_na = false
+            item_data.greyout = false
+            item_data.greyout_pending = false
             if data.variablesReference and data.variablesReference > 0 then
-                var_item.children_callback = function(cb)
-                    self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, path, cb)
+                children_callback = function(cb)
+                    self:_load_variables(context, ds.data_providers, data.variablesReference, item_id, item_data.path, cb)
                 end
             end
         end
-        self:upsert_item(parent_id, var_item)
+        ---@type loop.comp.ItemTree.ItemDef
+        local update_def = {
+            id = item_id,
+            data = item_data,
+            children_callback = children_callback
+        }
+        self:update_item(update_def)
+        if on_complete then on_complete() end
     end)
 end
 
 ---@param context number
 function Variables:_load_session_vars(context)
     local root_id = "s"
-    local root_expanded = self._layout_cache[root_id]
-    if root_expanded == nil then root_expanded = true end
-
-    ---@type loop.comp.ItemTree.ItemDef
-    local root_item = {
-        id = root_id, expanded = root_expanded, data = { path = root_id, scopelabel = "Variables" }
-    }
-
+    ---@type loop.comp.ItemTree.ChildrenCallback
+    local children_callback
     local ds = self._current_data_source
     if ds and ds.frame then
-        root_item.children_callback = function(cb)
+        children_callback = function(cb)
             ds.data_providers.scopes_provider({ frameId = ds.frame.id }, function(_, scopes_data)
                 if self._query_context ~= context then return end
                 if scopes_data and scopes_data.scopes then
@@ -419,29 +545,40 @@ function Variables:_load_session_vars(context)
             end)
         end
     end
-    self:upsert_item(nil, root_item)
+    if self:have_item(root_id) then
+        self:set_children_callback(root_id, children_callback)
+    else
+        local root_expanded = self._layout_cache[root_id]
+        if root_expanded == nil then root_expanded = true end
+
+        ---@type loop.comp.ItemTree.ItemDef
+        local root_item = {
+            id = root_id, expanded = root_expanded, children_callback = children_callback, data = { path = root_id, scopelabel = "Variables" }
+        }
+        self:add_item(nil, root_item)
+    end
 end
 
 ---@param comp loop.CompBufferController
 function Variables:link_to_buffer(comp)
     ItemTreeComp.link_to_buffer(self, comp)
 
-    ---@param item loop.comp.ItemTree.Item|nil
-    local function add_or_edit_watch(item)
-        floatwin.input_at_cursor({
-                default_text = item and item.data.name or "" },
+    local function add_watch_expr()
+        floatwin.input_at_cursor({},
             function(expr)
                 if not expr or expr == "" then return end
-                if not item then
-                    if _add_expr(expr) then
-                        -- ONLY reload watches
-                        self:_load_expressions(self._query_context)
-                    end
-                elseif expr ~= item.data.name then
-                    if _reset_expr(item.data.name, expr) then
-                        -- ONLY reload watches
-                        self:_load_expressions(self._query_context)
-                    end
+                self:_add_expr(expr)
+            end
+        )
+    end
+
+    ---@param item loop.comp.ItemTree.Item
+    local function edit_watch_expr(item)
+        floatwin.input_at_cursor({ default_text = item.data.name or "" },
+            function(expr)
+                if not expr or expr == "" then return end
+                if expr ~= item.data.name then
+                    self:_reset_expr(item.data.expr_id, item.data.name, expr)
                 end
             end
         )
@@ -497,14 +634,14 @@ function Variables:link_to_buffer(comp)
         )
     end
 
-    comp.add_keymap("i", { desc = "Add Expression", callback = function() add_or_edit_watch() end })
+    comp.add_keymap("i", { desc = "Add Expression", callback = function() add_watch_expr() end })
     comp.add_keymap("c", {
         desc = "Edit Expression/Variable",
         callback = function()
             local cur = self:get_cur_item()
             if cur then
                 if cur.data.is_expr then
-                    add_or_edit_watch(cur)
+                    edit_watch_expr(cur)
                 else
                     edit_variable(cur)
                 end
@@ -516,10 +653,7 @@ function Variables:link_to_buffer(comp)
         callback = function()
             local cur = self:get_cur_item()
             if cur and cur.data.is_expr then
-                _remove_expr(cur.data.name)
-                self:remove_item(cur.id)
-                -- ONLY reload watches to sync indices
-                self:_load_expressions(self._query_context)
+                self:_remove_expr(cur.data.expr_id)
             end
         end
     })
