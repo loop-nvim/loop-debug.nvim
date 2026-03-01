@@ -20,6 +20,20 @@ local function get_task_args(task)
     return { unpack(cmdparts, 2) }
 end
 
+---@param to_merge {string:string}?
+local function _merge_env(to_merge)
+    local env = {}
+    for k, v in pairs(vim.fn.environ() or {}) do
+        env[k] = v
+    end
+    if type(to_merge) == "table" then
+        for k, v in pairs(to_merge) do
+            env[k] = v
+        end
+    end
+    return env
+end
+
 ---@class loopdebug.Config.Debugger.HookContext
 ---@field task loopdebug.Task
 ---@field ws_dir string
@@ -42,6 +56,7 @@ local function _get_task_cwd(context)
     return (task and task.cwd) or context.ws_dir
 end
 
+
 local function mason_bin(name)
     local ok, mason_registry = pcall(require, "mason-registry")
     if not ok then return name end
@@ -50,37 +65,19 @@ local function mason_bin(name)
     if not (pkg_ok and pkg:is_installed()) then
         return name
     end
-
     -- Verified: pkg.spec.install_path is the raw string path
     -- where the package is located.
     local path = pkg.spec.install_path
     if not path then return name end
-
-    local possible_bins = {
-        -- Specific to codelldb (VS Code extension format)
-        vim.fs.joinpath(path, "extension", "adapter", name),
-        -- Standard Mason /bin folder
-        vim.fs.joinpath(path, "bin", name),
-        -- Root of the package
-        vim.fs.joinpath(path, name),
-    }
-
+    local bin_path = vim.fs.joinpath(path, "bin", name)
     -- Check for Windows executable if needed
     if vim.fn.has("win32") == 1 then
-        local win_bins = {}
-        for _, b in ipairs(possible_bins) do
-            table.insert(win_bins, b .. ".exe")
-        end
-        possible_bins = win_bins
+        bin_path = bin_path .. ".exe"
     end
-
-    for _, bin in ipairs(possible_bins) do
-        ---@diagnostic disable-next-line: undefined-field
-        if vim.uv.fs_stat(bin) then
-            return bin
-        end
+    ---@diagnostic disable-next-line: undefined-field
+    if vim.uv.fs_stat(bin_path) then
+        return bin_path
     end
-
     return name
 end
 
@@ -109,10 +106,10 @@ _debuggers.lua = {
                 "node",
                 adapter_path,
             },
-            env = {
+            env = _merge_env({
                 LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
                     "extension", "debugger", "?.lua") .. ";;"
-            },
+            }),
         }
     end,
     launch_args = function(context)
@@ -171,7 +168,7 @@ _debuggers.lldb = {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            env = task.env,
+            env = _merge_env(task.env),
             stopOnEntry = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
             initCommands = task.initCommands,
@@ -207,7 +204,7 @@ _debuggers.codelldb = {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            env = task.env,
+            env = _merge_env(task.env),
             stopOnEntry = task.stopOnEntry or false,
             -- Integrated terminal is usually best for LLDB
             runInTerminal = task.runInTerminal ~= false,
@@ -235,29 +232,30 @@ _debuggers.codelldb = {
 -- ==================================================================
 _debuggers.gdb = {
     adapter_config = function()
-        local home = os.getenv("HOME")
+        local home = os.getenv("HOME") or "~"
+        local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
+        local command = { "gdb", "--interpreter=dap" }
+        -- Only add -ix <file> if it exists
+        ---@diagnostic disable-next-line: undefined-field
+        if vim.loop.fs_stat(gdbinit_path) then
+            table.insert(command, "-ix")
+            table.insert(command, gdbinit_path)
+        end
         return {
             adapter_id = "gdb",
             name = "GDB (via DAP)",
             type = "executable",
-            command = { "gdb", "--interpreter=dap", "-ix", vim.fs.joinpath(vim.env.HOME or "~", ".gdbinit") },
+            command = command,
         }
     end,
 
     launch_args = function(context)
         local task = context.task
-        local env = task.env
-        if not env or next(env) == nil then
-            env = vim.fn.environ()
-            if not env or next(env) == nil then
-                env = nil
-            end
-        end
         return {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            env = env,
+            env = _merge_env(task.env),
             stopAtBeginningOfMainSubprogram = task.stopOnEntry or false,
             runInTerminal = task.runInTerminal ~= false,
         }
@@ -361,7 +359,7 @@ _debuggers["js-debug"] = {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
-            env = task.env,
+            env = _merge_env(task.env),
             stopOnEntry = task.stopOnEntry or false,
             sourceMaps = task.sourceMaps ~= false,
         }
@@ -423,7 +421,7 @@ _debuggers.debugpy = {
             stopOnEntry = false,
             justMyCode = task.justMyCode ~= false,
             console = "integratedTerminal",
-            env = task.env,
+            env = _merge_env(task.env),
         }
     end,
 }
@@ -468,7 +466,7 @@ _debuggers.go = {
         return {
             mode = "debug",
             program = task.cwd or _get_task_cwd(context),
-            env = task.env,
+            env = _merge_env(task.env),
             dlvToolPath = mason_bin("delve"),
         }
     end,
@@ -524,17 +522,25 @@ _debuggers.bash = {
         }
     end,
     launch_args = function(context)
+        local bashdb_path = function()
+            local path = vim.fn.stdpath("data") .. "/mason/opt/bashdb/bashdb"
+            ---@diagnostic disable-next-line: undefined-field
+            if vim.uv.fs_stat(path) then
+                return path
+            end
+            return "bashdb"
+        end
         return {
             name = "Launch Bash Script",
             type = "bashdb",
             program = get_task_program(context.task),
             cwd = _get_task_cwd(context),
             pathBash = "bash",
-            pathBashdb = mason_bin("bashdb"),
+            pathBashdb = bashdb_path(),
             pathCat = "cat",
             pathMkfifo = "mkfifo",
             pathPkill = "pkill",
-            env = context.task.env,
+            env = _merge_env(context.task.env),
             terminalKind = "integrated",
         }
     end,
@@ -595,7 +601,7 @@ _debuggers.netcoredbg = {
             type = "coreclr",
             request = "launch",
             program = type(context.task.command) == "string" and context.task.command,
-            env = context.task.env,
+            env = _merge_env(context.task.env),
         }
     end,
     attach_args = function(context)

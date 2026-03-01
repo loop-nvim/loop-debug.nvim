@@ -11,7 +11,7 @@ end
 ---@class loopdebug.Process.Opts
 ---@field cmd string
 ---@field args string[]|nil
----@field env string[]|nil
+---@field env {string:string}|nil
 ---@field cwd string
 ---@field on_output fun(data:string, is_stderr:boolean)
 ---@field on_exit fun(code:number, signal:number)
@@ -29,9 +29,13 @@ function Process:init(name, opts)
     self.cmd = opts.cmd
     self.args = opts.args or {}
     self.cwd = opts.cwd
-    self.env = opts.env or {}
 
-    self.env['PWD'] = self.cwd -- required for commands to use cwd in all cases
+    if opts.env then
+        self.env = vim.fn.copy(opts.env)
+    else
+        self.env = vim.fn.copy(vim.fn.environ() or {}) -- inherid parent env
+    end
+    self.env['PWD'] = self.cwd                      -- required for commands to use cwd in all cases
 
     self.on_output = opts.on_output
     self.on_exit = opts.on_exit
@@ -122,6 +126,7 @@ end
 
 -- Convert env dict → {"KEY=value", ...}
 function Process:_env_list()
+    assert(self.env)
     local out = {}
     for k, v in pairs(self.env) do
         table.insert(out, string.format("%s=%s", k, v))
