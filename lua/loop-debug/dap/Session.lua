@@ -768,16 +768,11 @@ function Session:_send_configuration(on_complete)
             return
         end
         if self._early_attach and target.request == "attach" then
-            self:_send_attach(function(attach_ok)
-                if not attach_ok then
-                    on_complete(false)
-                    return
-                end
-                self:_send_configurationDone(on_complete)
-            end)
-        else
-            self:_send_configurationDone(on_complete)
+            -- we don't wait for the response, in _early_attach mode (gdb),
+            -- the debugger will not respond until we send configurationDone
+            self:_send_attach(function() end)
         end
+        self:_send_configurationDone(on_complete)
     end)
 end
 
