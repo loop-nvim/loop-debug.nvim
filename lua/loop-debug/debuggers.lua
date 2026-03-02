@@ -23,6 +23,7 @@ local config = require("loop-debug.config")
 ---@field early_attach boolean?
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
+---@field args_postprocess (fun(args:table,request:"launch"|"attach"):boolean,string?)?
 
 --------------------------------------------------------------------------------
 -- Internal Helpers
@@ -87,29 +88,6 @@ local function mason_bin(name)
     return name
 end
 
----@param base table
----@param task loopdebug.Task
----@param except_list string[]?
----@return table
-local function _merge_debug_options(base, task, except_list)
-    local except_map = nil
-    if except_list then
-        except_map = {}
-        for _, v in ipairs(except_list) do
-            except_map[v] = true
-        end
-    end
-    local opts = vim.deepcopy(base)
-    if task.debug_options and type(task.debug_options) == "table" then
-        for k, v in pairs(task.debug_options) do
-            if not except_map or not except_map[k] then
-                opts[k] = v
-            end
-        end
-    end
-    return opts
-end
-
 --------------------------------------------------------------------------------
 -- Debugger Definitions
 --------------------------------------------------------------------------------
@@ -144,7 +122,7 @@ _debuggers["local-lua-debugger"] = {
         }
     end,
     launch_args = function(context)
-        return _merge_debug_options({
+        return {
             type = "lua-local",
             request = "launch",
             name = "Debug",
@@ -154,7 +132,7 @@ _debuggers["local-lua-debugger"] = {
                 file = get_task_program(context.task),
                 communication = 'stdio',
             },
-        }, context.task)
+        }
     end,
 }
 
@@ -173,15 +151,18 @@ _debuggers["osv"] = {
     end,
 
     attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             request = "attach",
             type = "lua",
             host = "127.0.0.1",
-            port = dbg.port and tonumber(dbg.port),
             cwd = _get_task_cwd(context),
-        }, context.task, { "port" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -200,21 +181,26 @@ _debuggers.lldb = {
     end,
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
             runInTerminal = true,
-        }, task)
+        }
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
-            pid = tonumber(dbg.pid),
+        return {
             program = type(context.task.command) == "string" and context.task.command or nil,
-        }, context.task, { "pid" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
+
 }
 
 -- ==================================================================
@@ -233,7 +219,7 @@ _debuggers.codelldb = {
     end,
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             name = "Launch (codelldb)",
             type = "codelldb",
             request = "launch",
@@ -242,17 +228,22 @@ _debuggers.codelldb = {
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
             runInTerminal = true,
-        }, task)
+        }
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             name = "Attach (codelldb)",
             type = "codelldb",
             request = "attach",
-            pid = tonumber(dbg.pid),
-        }, context.task, { "pid" })
+            pid = "${select-pid}",
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.pid = args.pid and tonumber(args.pid) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -261,6 +252,7 @@ _debuggers.codelldb = {
 ---@type loopdebug.Config.Debugger
 _debuggers.gdb = {
     language = "c, cpp, rust",
+    early_attach = true,
     adapter_config = function(context)
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
@@ -280,23 +272,27 @@ _debuggers.gdb = {
     end,
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
             runInTerminal = true,
-        }, task)
+        }
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             request = "attach",
-            pid = tonumber(dbg.processId),
             cwd = _get_task_cwd(context),
-        }, context.task, { "pid" })
+            pid = "${select-pid}",
+        }
     end,
-    early_attach = true,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.pid = args.pid and tonumber(args.pid) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -381,7 +377,7 @@ _debuggers["js-debug"] = {
 
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             type = "pwa-node",
             request = "launch",
             runtimeExecutable = "node",
@@ -389,19 +385,23 @@ _debuggers["js-debug"] = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-        }, task)
+        }
     end,
 
     attach_args = function(context)
         local task = context.task
         local dbg = task.debug_options or {}
-        return _merge_debug_options({
+        return {
             type = "pwa-node",
             request = "attach",
-            port = tonumber(dbg.port) or 0,
             cwd = _get_task_cwd(context),
-        }, task, { "port" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -433,13 +433,13 @@ _debuggers.debugpy = {
     end,
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             program = get_task_program(task),
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
             console = "integratedTerminal",
-        }, task)
+        }
     end,
 }
 
@@ -457,14 +457,18 @@ _debuggers["debugpy:remote"] = {
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             request = "attach",
             connect = {
                 host = dbg.host or "127.0.0.1",
-                port = tonumber(dbg.port),
             }
-        }, context.task, { "port" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -483,20 +487,26 @@ _debuggers["delve"] = {
     end,
     launch_args = function(context)
         local task = context.task
-        return _merge_debug_options({
+        return {
             mode = "debug",
             program = task.cwd or _get_task_cwd(context),
             env = _merge_env(task.env),
             dlvToolPath = mason_bin("delve"),
-        }, task)
+        }
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             mode = "local",
-            processId = tonumber(dbg.processId),
-        }, context.task, { "processId" })
+            processId = "${select-pid}",
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.processId = args.processId and tonumber(args.processId) or nil
+        return true
+    end
+
 }
 
 -- ==================================================================
@@ -524,7 +534,7 @@ _debuggers["bash-debug-adapter"] = {
         if vim.uv.fs_stat(bashdb_exe) then
             path_to_bashdb = bashdb_exe
         end
-        return _merge_debug_options({
+        return {
             name = "Launch Bash Script",
             type = "bashdb",
             request = "launch",
@@ -539,7 +549,7 @@ _debuggers["bash-debug-adapter"] = {
             pathPkill = "pkill",
             env = _merge_env(task.env),
             terminalKind = "integrated",
-        }, task)
+        }
     end,
 }
 
@@ -560,13 +570,17 @@ _debuggers["php-debug-adapter"] = {
     launch_args = function(context)
         local task = context.task
         local dbg = task.debug_options or {}
-        return _merge_debug_options({
+        return {
             name = "Listen for Xdebug",
             type = "php",
             request = "launch",
-            port = tonumber(dbg.port) or 9003,
-        }, task, { "port" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -586,12 +600,16 @@ _debuggers["java-debug-server"] = {
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             request = "attach",
             host = dbg.host or "127.0.0.1",
-            port = tonumber(dbg.port),
-        }, context.task, { "port" })
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.port = args.port and tonumber(args.port) or nil
+        return true
+    end
 }
 
 -- ==================================================================
@@ -609,21 +627,26 @@ _debuggers.netcoredbg = {
         }
     end,
     launch_args = function(context)
-        return _merge_debug_options({
+        return {
             type = "coreclr",
             request = "launch",
             program = type(context.task.command) == "string" and context.task.command or nil,
             env = _merge_env(context.task.env),
-        }, context.task)
+        }
     end,
     attach_args = function(context)
         local dbg = context.task.debug_options or {}
-        return _merge_debug_options({
+        return {
             type = "coreclr",
             request = "attach",
-            processId = tonumber(dbg.processId),
-        }, context.task, { "processId" })
+            processId = "${select-pid}",
+        }
     end,
+    args_postprocess = function(args, request)
+        if request == "launch" then return true end
+        args.processId = args.processId and tonumber(args.processId) or nil
+        return true
+    end
 }
 
 --------------------------------------------------------------------------------

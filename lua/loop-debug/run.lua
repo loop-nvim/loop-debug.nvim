@@ -8,6 +8,20 @@ local breakpoints = require('loop-debug.breakpoints')
 local fntools = require('loop.tools.fntools')
 local logs = require('loop.logs')
 
+
+---@param base table
+---@param task loopdebug.Task
+local function _merge_debug_options(base, task)
+    if task.debug_options and type(task.debug_options) == "table" then
+        for k, v in pairs(task.debug_options) do
+            if not base[k] then
+                base[k] = v
+            end
+        end
+    end
+end
+
+
 ---@param task_name string
 ---@param on_exit fun(code : number)
 ---@return loop.job.debugjob.Tracker
@@ -160,6 +174,12 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     else
         -- deep copy because a badly coded hook may change the args
         request_args = vim.deepcopy(request_args)
+    end
+
+    _merge_debug_options(request_args, task)
+    if debugger.args_postprocess then
+        local ok, err = debugger.args_postprocess(request_args, task.request)
+        if not ok and type(err) == "string" then return nil, err end
     end
 
     local terminate_on_disconnect = task.terminate_on_disconnect
