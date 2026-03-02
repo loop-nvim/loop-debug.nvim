@@ -272,6 +272,33 @@ function M.show()
             _apply_layout()
         end,
     })
+
+    vim.api.nvim_create_autocmd("WinNew", {
+        group = _ui_auto_group,
+        callback = function(args)
+            local new_winid = vim.api.nvim_get_current_win()
+            if vim.api.nvim_win_get_config(new_winid).relative ~= "" then
+                return -- Ignore floating windows
+            end
+            vim.schedule(function()
+                _apply_layout()
+            end)
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("WinClosed", {
+        group = _ui_auto_group,
+        callback = function(args)
+            local closed_winid = tonumber(args.match)
+            if not closed_winid or vim.api.nvim_win_get_config(closed_winid).relative ~= "" then
+                return -- Ignore floating windows
+            end
+            vim.schedule(function()
+                vim.notify("apply layout after close")
+                _apply_layout()
+            end)
+        end,
+    })
 end
 
 -- ======================================
