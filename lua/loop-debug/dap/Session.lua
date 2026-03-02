@@ -212,7 +212,7 @@ function Session:start(args)
 
     local adapter = args.debug_args.adapter
 
-    self._delay_configuration_done = args.debug_args.delay_configuration_done == true
+    self._early_attach = args.debug_args.early_attach == true
     self._capabilities = {}
     self._process_ended = false
     self._tracker = args.tracker
@@ -693,6 +693,13 @@ end
 
 ---@param on_complete fun(success:boolean)
 function Session:_send_attach(on_complete)
+    if self._attach_already_sent then
+        self._log:error("_send_attach called twice")
+        on_complete(false)
+        return
+    end
+    self._attach_already_sent = true
+
     local target = self._args.debug_args
     assert(target)
     assert(target.request_args)
@@ -712,6 +719,13 @@ end
 
 ---@param on_complete fun(success:boolean)
 function Session:_send_launch(on_complete)
+    if self._launch_already_sent then
+        self._log:error("_send_launch called twice")
+        on_complete(false)
+        return
+    end
+    self._launch_already_sent = true
+
     local target = self._args.debug_args
     assert(target)
     assert(target.request_args)
@@ -744,17 +758,26 @@ end
 
 ---@param on_complete fun(success:boolean)
 function Session:_send_configuration(on_complete)
+    local target = self._args.debug_args
+    assert(target)
+
     self._can_send_breakpoints = true
     self:_send_pending_breakpoints(function(bpts_ok)
         if not bpts_ok then
             on_complete(false)
             return
         end
-        if self._delay_configuration_done then
-            on_complete(true)
-            return
+        if self._early_attach and target.request == "attach" then
+            self:_send_attach(function(attach_ok)
+                if not attach_ok then
+                    on_complete(false)
+                    return
+                end
+                self:_send_configurationDone(on_complete)
+            end)
+        else
+            self:_send_configurationDone(on_complete)
         end
-        self:_send_configurationDone(on_complete)
     end)
 end
 
@@ -851,7 +874,7 @@ function Session:_on_starting_state()
     local target = self._args.debug_args
     assert(target)
 
-    local on_complete2 = function(success)
+    local on_complete = function(success)
         if success then
             self._fsm:trigger(fsmdata.trigger.startup_ok)
         else
@@ -859,28 +882,22 @@ function Session:_on_starting_state()
         end
     end
 
-    local on_complete1 = function(success)
-        if not success then
-            on_complete2(false)
-        elseif not self._delay_configuration_done then
-            on_complete2(true)
-        else
-            self:_send_configurationDone(on_complete2)
-        end
-    end
-
     if target.request == "launch" then
-        self:_send_launch(on_complete1)
+        self:_send_launch(on_complete)
         return
     end
 
     if target.request == "attach" then
-        self:_send_attach(on_complete1)
+        if self._early_attach then
+            on_complete(true)
+            return
+        end
+        self:_send_attach(on_complete)
         return
     end
 
     self._log:error("handled request type: " .. tostring(target.request))
-    on_complete1(false)
+    on_complete(false)
 end
 
 function Session:_on_running_state()

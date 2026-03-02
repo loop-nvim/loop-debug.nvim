@@ -177,7 +177,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
             request = task.request,
             request_args = request_args,
             terminate_debuggee = terminate_on_disconnect,
-            delay_configuration_done = debugger.delay_configuration_done,
+            early_attach = debugger.early_attach,
         },
     }
 

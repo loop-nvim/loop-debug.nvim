@@ -20,7 +20,7 @@ local config = require("loop-debug.config")
 ---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
----@field delay_configuration_done boolean?
+---@field early_attach boolean?
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
 
@@ -296,7 +296,7 @@ _debuggers.gdb = {
             cwd = _get_task_cwd(context),
         }, context.task, { "pid" })
     end,
-    delay_configuration_done = true,
+    early_attach = true,
 }
 
 -- ==================================================================
