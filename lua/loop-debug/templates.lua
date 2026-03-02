@@ -1,7 +1,10 @@
 ---@type loop.taskTemplate[]
 return {
+    -- ==================================================================
+    -- Default
+    -- ==================================================================
     {
-        name = "Default template",
+        name = "Debug (Default)",
         task = {
             name = "Debug",
             if_running = "refuse",
@@ -17,7 +20,7 @@ return {
     -- Lua
     -- ==================================================================
     {
-        name = "lua - run (local-lua-debugger)",
+        name = "Debug Lua (local debugger)",
         task = {
             name = "Debug Lua",
             if_running = "refuse",
@@ -30,9 +33,9 @@ return {
         }
     },
     {
-        name = "lua - attach (osv / remote)",
+        name = "OSV Attach Process",
         task = {
-            name = "Attach to Lua (remote)",
+            name = "Attach Process (OSV)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -49,7 +52,7 @@ return {
     -- C/C++/Rust – LLDB
     -- ==================================================================
     {
-        name = "lldb - run",
+        name = "LLDB Debug",
         task = {
             name = "Debug (LLDB)",
             if_running = "refuse",
@@ -66,9 +69,9 @@ return {
         }
     },
     {
-        name = "lldb - attach",
+        name = "LLDB Attach Process",
         task = {
-            name = "Attach (LLDB)",
+            name = "Attach Process (LLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -84,7 +87,7 @@ return {
     -- C/C++/Rust – GDB
     -- ==================================================================
     {
-        name = "gdb - run",
+        name = "GDB Debug",
         task = {
             name = "Debug (GDB)",
             if_running = "refuse",
@@ -101,9 +104,9 @@ return {
         }
     },
     {
-        name = "gdb - attach",
+        name = "GDB Attach Process",
         task = {
-            name = "Attach (GDB)",
+            name = "Attach Process (GDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -119,7 +122,7 @@ return {
     -- C/C++/Rust – CodeLLDB
     -- ==================================================================
     {
-        name = "codelldb - run",
+        name = "CodeLLDB Debug",
         task = {
             name = "Debug (CodeLLDB)",
             if_running = "refuse",
@@ -137,9 +140,9 @@ return {
         }
     },
     {
-        name = "codelldb - attach",
+        name = "CodeLLDB Attach Process",
         task = {
-            name = "Attach (CodeLLDB)",
+            name = "Attach Process (CodeLLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -152,10 +155,10 @@ return {
     },
 
     -- ==================================================================
-    -- JavaScript / TypeScript / Node.js
+    -- Node.js / JavaScript / TypeScript
     -- ==================================================================
     {
-        name = "node - run",
+        name = "Node.js Debug",
         task = {
             name = "Debug Node.js",
             if_running = "refuse",
@@ -172,9 +175,9 @@ return {
         }
     },
     {
-        name = "node - attach",
+        name = "js-debug Attach Process",
         task = {
-            name = "Attach to Node.js",
+            name = "Attach Process (js-debug)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -192,7 +195,7 @@ return {
     -- Python
     -- ==================================================================
     {
-        name = "python - run",
+        name = "Python Debug",
         task = {
             name = "Debug Python",
             if_running = "refuse",
@@ -209,9 +212,9 @@ return {
         }
     },
     {
-        name = "python - attach (remote)",
+        name = "Python Attach Process (debugpy)",
         task = {
-            name = "Attach Python (remote)",
+            name = "Attach Process (debugpy)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -226,10 +229,10 @@ return {
     },
 
     -- ==================================================================
-    -- Go (delve)
+    -- Go (Delve)
     -- ==================================================================
     {
-        name = "go - run",
+        name = "Go Debug (Delve)",
         task = {
             name = "Debug Go",
             if_running = "refuse",
@@ -240,14 +243,13 @@ return {
             request = "launch",
             debug_options = {
                 mode = "debug",
-                -- program = can be set automatically from cwd or you can add it
             },
         }
     },
     {
-        name = "go - attach",
+        name = "Delve Attach Process",
         task = {
-            name = "Attach Go",
+            name = "Attach Process (Delve)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -263,7 +265,7 @@ return {
     -- Bash
     -- ==================================================================
     {
-        name = "bash - run",
+        name = "Bash Debug",
         task = {
             name = "Debug Bash",
             if_running = "refuse",
@@ -280,7 +282,7 @@ return {
     -- PHP (Xdebug)
     -- ==================================================================
     {
-        name = "php - listen (xdebug)",
+        name = "Xdebug Listen",
         task = {
             name = "Listen for Xdebug",
             if_running = "refuse",
@@ -298,10 +300,10 @@ return {
     },
 
     -- ==================================================================
-    -- .NET (netcoredbg)
+    -- .NET (NetCoreDbg)
     -- ==================================================================
     {
-        name = "netcoredbg - run",
+        name = "NetCoreDbg Debug",
         task = {
             name = "Debug .NET",
             if_running = "refuse",
@@ -314,9 +316,9 @@ return {
         }
     },
     {
-        name = "netcoredbg - attach",
+        name = "NetCoreDbg Attach Process",
         task = {
-            name = "Attach .NET",
+            name = "Attach Process (NetCoreDbg)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -332,9 +334,9 @@ return {
     -- Java
     -- ==================================================================
     {
-        name = "java - attach",
+        name = "JDWP Attach Process",
         task = {
-            name = "Attach Java (JDWP)",
+            name = "Attach Process (JDWP)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
