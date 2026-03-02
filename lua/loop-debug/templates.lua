@@ -54,7 +54,7 @@ return {
     -- C/C++/Rust – LLDB
     -- ==================================================================
     {
-        name = "Launch binary (LLDB)",
+        name = "Debug binary (LLDB)",
         task = {
             name = "Debug (LLDB)",
             if_running = "refuse",
@@ -89,7 +89,7 @@ return {
     -- C/C++/Rust – GDB
     -- ==================================================================
     {
-        name = "Launch binary (GDB)",
+        name = "Debug binary (GDB)",
         task = {
             name = "Debug (GDB)",
             if_running = "refuse",
@@ -124,7 +124,7 @@ return {
     -- C/C++/Rust – CodeLLDB
     -- ==================================================================
     {
-        name = "Launch binary (CodeLLDB)",
+        name = "Debug binary (CodeLLDB)",
         task = {
             name = "Debug (CodeLLDB)",
             if_running = "refuse",
@@ -234,7 +234,7 @@ return {
     -- Go (Delve)
     -- ==================================================================
     {
-        name = "Go (launch with Delve)",
+        name = "Debug Go (launch with Delve)",
         task = {
             name = "Debug Go",
             if_running = "refuse",
@@ -267,7 +267,7 @@ return {
     -- Bash
     -- ==================================================================
     {
-        name = "Bash (bash-debug-adapter)",
+        name = "Debug Bash script (bash-debug-adapter)",
         task = {
             name = "Debug Bash",
             if_running = "refuse",
@@ -285,9 +285,9 @@ return {
     -- PHP (Xdebug)
     -- ==================================================================
     {
-        name = "Listen for Xdebug (php-debug-adapter)",
+        name = "Debug PHP (php-debug-adapter)",
         task = {
-            name = "Listen for Xdebug",
+            name = "Debug PHP",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -306,7 +306,7 @@ return {
     -- .NET (NetCoreDbg)
     -- ==================================================================
     {
-        name = ".NET (launch with netcoredbg)",
+        name = "Debug .NET (launch with netcoredbg)",
         task = {
             name = "Debug .NET",
             if_running = "refuse",
