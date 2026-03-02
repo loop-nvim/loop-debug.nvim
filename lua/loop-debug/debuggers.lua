@@ -89,8 +89,7 @@ end
 
 local function fill_launch_defaults(args, ctx)
     local task = ctx.task
-
-    args.request = args.request or "launch"
+    args.request = "launch"
     args.program = args.program or get_task_program(task)
     args.args = args.args or get_task_args(task)
     args.cwd = args.cwd or _get_task_cwd(ctx)
@@ -98,23 +97,7 @@ local function fill_launch_defaults(args, ctx)
 end
 
 local function fill_attach_defaults(args, ctx)
-    args.request = args.request or "attach"
-    args.cwd = args.cwd or _get_task_cwd(ctx)
-end
-
-local function normalize_numbers(args)
-    if args.port ~= nil then
-        args.port = tonumber(args.port)
-    end
-    if args.pid ~= nil then
-        args.pid = tonumber(args.pid)
-    end
-    if args.processId ~= nil then
-        args.processId = tonumber(args.processId)
-    end
-    if type(args.connect) == "table" and args.connect.port ~= nil then
-        args.connect.port = tonumber(args.connect.port)
-    end
+    args.request = "attach"
 end
 
 --------------------------------------------------------------------------------
@@ -180,28 +163,22 @@ _debuggers["osv"] = {
     language = "lua",
 
     adapter_config = function(context)
-        local dbg = context.task.debug_options or {}
+        local args = context.task.debug_options or {}
 
         return {
             adapter_id = "lua-remote-debugger",
             name = "Lua Remote Debugger",
             type = "server",
-            host = dbg.host or "127.0.0.1",
-            port = dbg.port and tonumber(dbg.port),
+            host = args.host or "127.0.0.1",
+            port = args.port and tonumber(args.port),
         }
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
-        local dbg = ctx.task.debug_options or {}
-
         args.type = args.type or "lua"
-        args.request = "attach"
-        args.host = args.host or dbg.host or "127.0.0.1"
-
-        normalize_numbers(args)
-
+        args.host = args.host or args.host or "127.0.0.1"
+        args.port = args.port and tonumber(args.port)
         return true
     end
 }
@@ -224,26 +201,19 @@ _debuggers.lldb = {
 
     enrich_launch_args = function(args, ctx)
         fill_launch_defaults(args, ctx)
-
         args.runInTerminal = args.runInTerminal ~= false
-
-        normalize_numbers(args)
         return true
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
         if not args.pid then
             return false, "pid required"
         end
-
-        normalize_numbers(args)
-
+        args.pid = args.pid and tonumber(args.pid)
         if not args.pid then
             return false, "invalid pid"
         end
-
         return true
     end,
 }
@@ -268,8 +238,6 @@ _debuggers.codelldb = {
         args.type = args.type or "codelldb"
         args.request = "launch"
         args.runInTerminal = args.runInTerminal ~= false
-
-        normalize_numbers(args)
         return true
     end,
 
@@ -279,17 +247,13 @@ _debuggers.codelldb = {
         args.name = args.name or "Attach (codelldb)"
         args.type = args.type or "codelldb"
         args.request = "attach"
-
         if not args.pid then
             return false, "pid required"
         end
-
-        normalize_numbers(args)
-
+        args.pid = args.pid and tonumber(args.pid)
         if not args.pid then
             return false, "invalid pid"
         end
-
         return true
     end
 }
@@ -320,29 +284,21 @@ _debuggers.gdb = {
 
     enrich_launch_args = function(args, ctx)
         fill_launch_defaults(args, ctx)
-
         args.request = "launch"
         args.runInTerminal = args.runInTerminal ~= false
-
-        normalize_numbers(args)
         return true
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
         args.request = "attach"
-
         if not args.pid then
             return false, "pid required"
         end
-
-        normalize_numbers(args)
-
+        args.pid = args.pid and tonumber(args.pid)
         if not args.pid then
             return false, "invalid pid"
         end
-
         return true
     end
 }
@@ -352,8 +308,8 @@ _debuggers["js-debug"] = {
 
     start_hook = function(context, callback)
         local task = context.task
-        local dbg = task.debug_options or {}
-        local port = (type(dbg.port) == "number" and dbg.port) or 0
+        local args = task.debug_options or {}
+        local port = (type(args.port) == "number" and args.port) or 0
         context.user_data.exit_handler = function(_)
             callback(false, "debug server stopped unexpectedly")
         end
@@ -414,14 +370,13 @@ _debuggers["js-debug"] = {
     end,
 
     adapter_config = function(context)
-        local dbg = context.task.debug_options or {}
+        local args = context.task.debug_options or {}
         return {
             adapter_id = "js-debug-adapter",
             name = "js-debug",
             type = "server",
-            host = dbg.host or "::1",
-            port = tonumber(dbg.port) or 0,
-            cwd = _get_task_cwd(context),
+            host = args.host or "::1",
+            port = tonumber(args.port) or 0,
         }
     end,
 
@@ -431,8 +386,6 @@ _debuggers["js-debug"] = {
         args.type = args.type or "pwa-node"
         args.request = "launch"
         args.runtimeExecutable = args.runtimeExecutable or "node"
-
-        normalize_numbers(args)
         return true
     end,
 
@@ -441,8 +394,7 @@ _debuggers["js-debug"] = {
 
         args.type = args.type or "pwa-node"
         args.request = "attach"
-
-        normalize_numbers(args)
+        args.port = args.port and tonumber(args.port)
         return true
     end
 }
@@ -475,10 +427,7 @@ _debuggers.debugpy = {
 
     enrich_launch_args = function(args, ctx)
         fill_launch_defaults(args, ctx)
-
         args.console = args.console or "integratedTerminal"
-
-        normalize_numbers(args)
         return true
     end
 }
@@ -487,25 +436,22 @@ _debuggers["debugpy:remote"] = {
     language = "python",
 
     adapter_config = function(context)
-        local dbg = context.task.debug_options or {}
+        local args = context.task.debug_options or {}
         return {
             adapter_id = "debugpy",
             name = "debugpy",
             type = "server",
-            host = dbg.host or "127.0.0.1",
-            port = tonumber(dbg.port),
+            host = args.connect and args.connect.host or "127.0.0.1",
+            port = args.connect and args.connect.port and tonumber(args.connect.port),
         }
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
-        local dbg = ctx.task.debug_options or {}
-
         args.connect = args.connect or {}
-        args.connect.host = args.connect.host or dbg.host or "127.0.0.1"
+        args.connect.host = args.connect.host or "127.0.0.1"
+        args.connect.port = args.connect.port and tonumber(args.connect.port)
 
-        normalize_numbers(args)
         return true
     end
 }
@@ -529,26 +475,19 @@ _debuggers["delve"] = {
         args.mode = args.mode or "debug"
         args.program = args.program or (ctx.task.cwd or _get_task_cwd(ctx))
         args.dlvToolPath = args.dlvToolPath or mason_bin("delve")
-
-        normalize_numbers(args)
         return true
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
         args.mode = args.mode or "local"
-
         if not args.processId then
             return false, "processId required"
         end
-
-        normalize_numbers(args)
-
+        args.processId = args.processId and tonumber(args.processId)
         if not args.processId then
             return false, "invalid processId"
         end
-
         return true
     end
 }
@@ -586,8 +525,6 @@ _debuggers["bash-debug-adapter"] = {
         args.pathMkfifo = args.pathMkfifo or "mkfifo"
         args.pathPkill = args.pathPkill or "pkill"
         args.terminalKind = args.terminalKind or "integrated"
-
-        normalize_numbers(args)
         return true
     end
 }
@@ -607,12 +544,8 @@ _debuggers["php-debug-adapter"] = {
 
     enrich_launch_args = function(args, ctx)
         fill_launch_defaults(args, ctx)
-
         args.name = args.name or "Listen for Xdebug"
         args.type = args.type or "php"
-        args.request = "launch"
-
-        normalize_numbers(args)
         return true
     end
 }
@@ -621,25 +554,21 @@ _debuggers["java-debug-server"] = {
     language = "java",
 
     adapter_config = function(context)
-        local dbg = context.task.debug_options or {}
+        local args = context.task.debug_options or {}
         return {
             adapter_id = "jds",
             name = "java-debug-server",
             type = "server",
-            host = dbg.host or "127.0.0.1",
-            port = tonumber(dbg.port),
+            host = args.host or "127.0.0.1",
+            port = tonumber(args.port),
         }
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
-        local dbg = ctx.task.debug_options or {}
-
         args.request = "attach"
-        args.host = args.host or dbg.host or "127.0.0.1"
-
-        normalize_numbers(args)
+        args.host = args.host or "127.0.0.1"
+        args.host = args.host and tonumber(args.host)
         return true
     end
 }
@@ -664,23 +593,17 @@ _debuggers.netcoredbg = {
         args.request = "launch"
         args.program = args.program
             or (type(ctx.task.command) == "string" and ctx.task.command or nil)
-
-        normalize_numbers(args)
         return true
     end,
 
     enrich_attach_args = function(args, ctx)
         fill_attach_defaults(args, ctx)
-
         args.type = args.type or "coreclr"
         args.request = "attach"
-
         if not args.processId then
             return false, "processId required"
         end
-
-        normalize_numbers(args)
-
+        args.processId = args.processId and tonumber(args.processId)
         if not args.processId then
             return false, "invalid processId"
         end

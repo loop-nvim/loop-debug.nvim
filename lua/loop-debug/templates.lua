@@ -4,7 +4,7 @@ return {
     -- Default
     -- ==================================================================
     {
-        name = "Debug (Default)",
+        name = "(Default)",
         task = {
             name = "Debug",
             if_running = "refuse",
@@ -21,7 +21,7 @@ return {
     -- Lua
     -- ==================================================================
     {
-        name = "Debug Lua (local debugger)",
+        name = "Debug Lua (local-lua-debugger)",
         task = {
             name = "Debug Lua",
             if_running = "refuse",
@@ -32,13 +32,12 @@ return {
             debugger = "local-lua-debugger",
             request = "launch",
             debug_options = vim.empty_dict(),
-
         }
     },
     {
-        name = "OSV Attach Process",
+        name = "Attach Neovim (OSV)",
         task = {
-            name = "Attach Process (OSV)",
+            name = "Attach Neovim",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -55,7 +54,7 @@ return {
     -- C/C++/Rust – LLDB
     -- ==================================================================
     {
-        name = "LLDB Debug",
+        name = "Launch binary (LLDB)",
         task = {
             name = "Debug (LLDB)",
             if_running = "refuse",
@@ -72,7 +71,7 @@ return {
         }
     },
     {
-        name = "LLDB Attach Process",
+        name = "Attach process (LLDB)",
         task = {
             name = "Attach Process (LLDB)",
             if_running = "refuse",
@@ -90,7 +89,7 @@ return {
     -- C/C++/Rust – GDB
     -- ==================================================================
     {
-        name = "GDB Debug",
+        name = "Launch binary (GDB)",
         task = {
             name = "Debug (GDB)",
             if_running = "refuse",
@@ -107,7 +106,7 @@ return {
         }
     },
     {
-        name = "GDB Attach Process",
+        name = "Attach process (GDB)",
         task = {
             name = "Attach Process (GDB)",
             if_running = "refuse",
@@ -125,7 +124,7 @@ return {
     -- C/C++/Rust – CodeLLDB
     -- ==================================================================
     {
-        name = "CodeLLDB Debug",
+        name = "Launch binary (CodeLLDB)",
         task = {
             name = "Debug (CodeLLDB)",
             if_running = "refuse",
@@ -143,7 +142,7 @@ return {
         }
     },
     {
-        name = "CodeLLDB Attach Process",
+        name = "Attach process (CodeLLDB)",
         task = {
             name = "Attach Process (CodeLLDB)",
             if_running = "refuse",
@@ -161,7 +160,7 @@ return {
     -- Node.js / JavaScript / TypeScript
     -- ==================================================================
     {
-        name = "Node.js Debug",
+        name = "Debug Node.js (js-debug)",
         task = {
             name = "Debug Node.js",
             if_running = "refuse",
@@ -178,7 +177,7 @@ return {
         }
     },
     {
-        name = "js-debug Attach Process",
+        name = "Attach Node.js process (js-debug)",
         task = {
             name = "Attach Process (js-debug)",
             if_running = "refuse",
@@ -198,7 +197,7 @@ return {
     -- Python
     -- ==================================================================
     {
-        name = "Python Debug",
+        name = "Debug Python (debugpy)",
         task = {
             name = "Debug Python",
             if_running = "refuse",
@@ -215,7 +214,7 @@ return {
         }
     },
     {
-        name = "Python Attach Process (debugpy)",
+        name = "Attach Python (debugpy)",
         task = {
             name = "Attach Process (debugpy)",
             if_running = "refuse",
@@ -235,7 +234,7 @@ return {
     -- Go (Delve)
     -- ==================================================================
     {
-        name = "Go Debug (Delve)",
+        name = "Go (launch with Delve)",
         task = {
             name = "Debug Go",
             if_running = "refuse",
@@ -250,7 +249,7 @@ return {
         }
     },
     {
-        name = "Delve Attach Process",
+        name = "Attach Go process (Delve)",
         task = {
             name = "Attach Process (Delve)",
             if_running = "refuse",
@@ -268,7 +267,7 @@ return {
     -- Bash
     -- ==================================================================
     {
-        name = "Bash Debug",
+        name = "Bash (bash-debug-adapter)",
         task = {
             name = "Debug Bash",
             if_running = "refuse",
@@ -286,7 +285,7 @@ return {
     -- PHP (Xdebug)
     -- ==================================================================
     {
-        name = "Xdebug Listen",
+        name = "Listen for Xdebug (php-debug-adapter)",
         task = {
             name = "Listen for Xdebug",
             if_running = "refuse",
@@ -307,7 +306,7 @@ return {
     -- .NET (NetCoreDbg)
     -- ==================================================================
     {
-        name = "NetCoreDbg Debug",
+        name = ".NET (launch with netcoredbg)",
         task = {
             name = "Debug .NET",
             if_running = "refuse",
@@ -321,7 +320,7 @@ return {
         }
     },
     {
-        name = "NetCoreDbg Attach Process",
+        name = "Attach .NET process (netcoredbg)",
         task = {
             name = "Attach Process (NetCoreDbg)",
             if_running = "refuse",
@@ -339,7 +338,7 @@ return {
     -- Java
     -- ==================================================================
     {
-        name = "JDWP Attach Process",
+        name = "Attach Java process via JDWP (java-debug-server)",
         task = {
             name = "Attach Process (JDWP)",
             if_running = "refuse",

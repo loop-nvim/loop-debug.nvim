@@ -9,6 +9,7 @@ assert(false, "should not require() meta file")
 ---@field pid number|string|nil
 ---@field stopOnEntry boolean|nil
 ---@field runInTerminal boolean|nil
+---@field connect table?
 
 ---@class loopdebug.Task : loop.Task
 ---@field debugger string
@@ -18,6 +19,7 @@ assert(false, "should not require() meta file")
 ---@field env table<string, string>|nil
 ---@field debug_options loopdebug.AdapterDebugOptions|nil -- Arbitrary debugger-specific arguments
 ---@field terminate_on_disconnect boolean|nil
+
 
 ---@class loopdebug.taskTemplate[] : loop.taskTemplate
 ---@field name string
