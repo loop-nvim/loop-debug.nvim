@@ -712,13 +712,23 @@ function M.get_debugger(name)
 end
 
 ---@param name string
----@param based_on string
 ---@param debugger_config loopdebug.Config.Debugger
-function M.register_debugger(name, based_on, debugger_config)
-    local base_debugger = _debuggers[based_on]
-    assert(base_debugger, "Invalid base debugger name: " .. tostring(based_on))
-    local new_debugger = vim.fn.deepcopy(base_debugger)
-    _user_debuggers[name] = vim.tbl_extend('force', new_debugger, debugger_config)
+function M.extend_debugger(name, debugger_config)
+    local existing = _user_debuggers[name] or _debuggers[name]
+    assert(existing, "Cannot extend non-existing debugger: " .. tostring(name))
+    _user_debuggers[name] = vim.tbl_deep_extend('force', existing, debugger_config)
+end
+
+---@param name string
+---@param debugger_config loopdebug.Config.Debugger
+function M.register_debugger(name, debugger_config)
+    assert(
+        type(name) == "string" and name:match("[_%a][_%w]*") ~= nil,
+        "Invalid debugger name: " .. tostring(name)
+    )
+    vim.validate('debugger_config', debugger_config, "table")
+    vim.validate('debugger_config.adapter_config', debugger_config.adapter_config, "function")
+    _user_debuggers[name] = vim.fn.deepcopy(debugger_config)
 end
 
 return M

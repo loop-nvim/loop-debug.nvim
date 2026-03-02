@@ -1,4 +1,4 @@
----@type loop.taskTemplate[]
+---@type loopdebug.taskTemplate[]
 return {
     -- ==================================================================
     -- Default
@@ -12,7 +12,8 @@ return {
             type = "debug",
             command = "",
             debugger = "",
-            request = "",
+            request = "launch",
+            debug_options = vim.empty_dict(),
         }
     },
 
@@ -30,6 +31,8 @@ return {
             cwd = "${wsdir}",
             debugger = "local-lua-debugger",
             request = "launch",
+            debug_options = vim.empty_dict(),
+
         }
     },
     {
@@ -275,6 +278,7 @@ return {
             cwd = "${wsdir}",
             debugger = "bash-debug-adapter",
             request = "launch",
+            debug_options = vim.empty_dict(),
         }
     },
 
@@ -313,6 +317,7 @@ return {
             cwd = "${wsdir}",
             debugger = "netcoredbg",
             request = "launch",
+            debug_options = vim.empty_dict(),
         }
     },
     {
