@@ -236,11 +236,11 @@ _debuggers.codelldb = {
             name = "Attach (codelldb)",
             type = "codelldb",
             request = "attach",
-            pid = "${select-pid}",
         }
     end,
     args_postprocess = function(args, request)
         if request == "launch" then return true end
+        if not args.pid then return false, "pid required" end
         args.pid = args.pid and tonumber(args.pid) or nil
         return true
     end
@@ -285,11 +285,11 @@ _debuggers.gdb = {
         return {
             request = "attach",
             cwd = _get_task_cwd(context),
-            pid = "${select-pid}",
         }
     end,
     args_postprocess = function(args, request)
         if request == "launch" then return true end
+        if not args.pid then return false, "pid required" end
         args.pid = args.pid and tonumber(args.pid) or nil
         return true
     end
@@ -498,11 +498,11 @@ _debuggers["delve"] = {
         local dbg = context.task.debug_options or {}
         return {
             mode = "local",
-            processId = "${select-pid}",
         }
     end,
     args_postprocess = function(args, request)
         if request == "launch" then return true end
+        if not args.processId then return false, "processId required" end
         args.processId = args.processId and tonumber(args.processId) or nil
         return true
     end
@@ -639,11 +639,11 @@ _debuggers.netcoredbg = {
         return {
             type = "coreclr",
             request = "attach",
-            processId = "${select-pid}",
         }
     end,
     args_postprocess = function(args, request)
         if request == "launch" then return true end
+        if not args.processId then return false, "processId required" end
         args.processId = args.processId and tonumber(args.processId) or nil
         return true
     end
