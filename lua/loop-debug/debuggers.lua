@@ -20,7 +20,7 @@ local config = require("loop-debug.config")
 ---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
 ---@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
----@field terminate_debuggee nil|boolean|fun(ctx:loopdebug.TaskContext):boolean
+---@field delay_configuration_done boolean?
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
 
@@ -251,13 +251,14 @@ _debuggers.codelldb = {
             type = "codelldb",
             request = "attach",
             pid = tonumber(dbg.pid),
-        }, context.task, {"pid"})
+        }, context.task, { "pid" })
     end,
 }
 
 -- ==================================================================
 -- c, cpp, rust (gdb)
 -- ==================================================================
+---@type loopdebug.Config.Debugger
 _debuggers.gdb = {
     language = "c, cpp, rust",
     adapter_config = function(context)
@@ -293,8 +294,9 @@ _debuggers.gdb = {
             request = "attach",
             pid = tonumber(dbg.processId),
             cwd = _get_task_cwd(context),
-        }, context.task, {"pid"})
+        }, context.task, { "pid" })
     end,
+    delay_configuration_done = true,
 }
 
 -- ==================================================================
@@ -398,7 +400,7 @@ _debuggers["js-debug"] = {
             request = "attach",
             port = tonumber(dbg.port) or 0,
             cwd = _get_task_cwd(context),
-        }, task, {"port"})
+        }, task, { "port" })
     end,
 }
 
@@ -461,7 +463,7 @@ _debuggers["debugpy:remote"] = {
                 host = dbg.host or "127.0.0.1",
                 port = tonumber(dbg.port),
             }
-        }, context.task, {"port"})
+        }, context.task, { "port" })
     end,
 }
 
@@ -493,7 +495,7 @@ _debuggers["delve"] = {
         return _merge_debug_options({
             mode = "local",
             processId = tonumber(dbg.processId),
-        }, context.task, {"processId"})
+        }, context.task, { "processId" })
     end,
 }
 
@@ -563,7 +565,7 @@ _debuggers["php-debug-adapter"] = {
             type = "php",
             request = "launch",
             port = tonumber(dbg.port) or 9003,
-        }, task, {"port"})
+        }, task, { "port" })
     end,
 }
 
@@ -588,7 +590,7 @@ _debuggers["java-debug-server"] = {
             request = "attach",
             host = dbg.host or "127.0.0.1",
             port = tonumber(dbg.port),
-        }, context.task, {"port"})
+        }, context.task, { "port" })
     end,
 }
 
@@ -620,7 +622,7 @@ _debuggers.netcoredbg = {
             type = "coreclr",
             request = "attach",
             processId = tonumber(dbg.processId),
-        }, context.task, {"processId"})
+        }, context.task, { "processId" })
     end,
 }
 

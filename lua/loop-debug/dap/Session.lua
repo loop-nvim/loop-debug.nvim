@@ -212,6 +212,7 @@ function Session:start(args)
 
     local adapter = args.debug_args.adapter
 
+    self._delay_configuration_done = args.debug_args.delay_configuration_done == true
     self._capabilities = {}
     self._process_ended = false
     self._tracker = args.tracker
@@ -572,7 +573,7 @@ end
 function Session:_on_initialized_event(event)
     self:_send_configuration(function(success)
         if success then
-            self._fsm:trigger(fsmdata.trigger.configuration_done)
+            self._fsm:trigger(fsmdata.trigger.intialize_ok)
         else
             self:_trace_notification("session initialization failed", "error")
             self._fsm:trigger(fsmdata.trigger.disconnect)
@@ -730,29 +731,30 @@ end
 
 function Session:_on_initializing_state()
     self:_notify_about_state()
-
     local on_complete = function(success)
         if not success then
-            self._fsm:trigger(fsmdata.trigger.initialize_resp_err)
+            self._fsm:trigger(fsmdata.trigger.intialize_err)
             return
         end
-        self._fsm:trigger(fsmdata.trigger.start)
+        self._fsm:trigger(fsmdata.trigger.intialize_ok)
     end
 
-    self:_send_initialize(function(success)
-        on_complete(success)
-    end)
+    self:_send_initialize(on_complete)
 end
 
 ---@param on_complete fun(success:boolean)
 function Session:_send_configuration(on_complete)
     self._can_send_breakpoints = true
     self:_send_pending_breakpoints(function(bpts_ok)
-        if bpts_ok then
-            self:_send_configurationDone(on_complete)
-        else
+        if not bpts_ok then
             on_complete(false)
+            return
         end
+        if self._delay_configuration_done then
+            on_complete(true)
+            return
+        end
+        self:_send_configurationDone(on_complete)
     end)
 end
 
@@ -849,24 +851,36 @@ function Session:_on_starting_state()
     local target = self._args.debug_args
     assert(target)
 
-    local on_complete = function(success)
-        self._fsm:trigger(success and
-            fsmdata.trigger.launch_resp_ok or
-            fsmdata.trigger.launch_resp_error)
+    local on_complete2 = function(success)
+        if success then
+            self._fsm:trigger(fsmdata.trigger.startup_ok)
+        else
+            self._fsm:trigger(fsmdata.trigger.startup_err)
+        end
+    end
+
+    local on_complete1 = function(success)
+        if not success then
+            on_complete2(false)
+        elseif not self._delay_configuration_done then
+            on_complete2(true)
+        else
+            self:_send_configurationDone(on_complete2)
+        end
     end
 
     if target.request == "launch" then
-        self:_send_launch(on_complete)
+        self:_send_launch(on_complete1)
         return
     end
 
     if target.request == "attach" then
-        self:_send_attach(on_complete)
+        self:_send_attach(on_complete1)
         return
     end
 
     self._log:error("handled request type: " .. tostring(target.request))
-    on_complete(false)
+    on_complete1(false)
 end
 
 function Session:_on_running_state()
@@ -891,7 +905,7 @@ function Session:_on_disconnecting_state()
             timeout_timer:stop()
             timeout_timer:close()
         end
-        self._fsm:trigger(err == nil and fsmdata.trigger.disconnect_resp_ok or fsmdata.trigger.disconnect_resp_err)
+        self._fsm:trigger(err == nil and fsmdata.trigger.disconnect_ok or fsmdata.trigger.disconnect_err)
     end)
 end
 

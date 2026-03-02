@@ -2,18 +2,16 @@ local M = {}
 
 require('loop-debug.tools.FSM')
 
+---@enum
 M.trigger =
 {
-    --initialize_resp_ok = "initialize_resp_ok",
-    initialize_resp_err = "initialize_resp_err",
-    initialized = "initialized",
-    start = "start",
-    configuration_done = "configuration_done",
-    launch_resp_ok = "launch_resp_ok",
-    launch_resp_error = "launch_resp_error",
+    intialize_err = "intialize_err",
+    intialize_ok = "intialize_ok",
+    startup_ok = "startup_ok",
+    startup_err = "startup_err",
     disconnect = "disconnect",
-    disconnect_resp_ok = "disconnect_resp_ok",
-    disconnect_resp_err = "disconnect_resp_err",
+    disconnect_ok = "disconnect_ok",
+    disconnect_err = "disconnect_err",
     disconnect_timeout = "disconnect_timeout",
 }
 
@@ -36,10 +34,8 @@ function M.create_fsm_data(handlers)
             initializing = {
                 state_handler = handlers.initializing,
                 triggers = {
-                    --[M.trigger.initialize_resp_ok] = "starting",
-                    [M.trigger.start] = "starting",
-                    [M.trigger.configuration_done] = "starting",
-                    [M.trigger.initialize_resp_err] = "disconnecting",
+                    [M.trigger.intialize_ok] = "starting",
+                    [M.trigger.intialize_err] = "disconnecting",
                     [M.trigger.disconnect] = 'disconnecting',
                 }
             },
@@ -47,8 +43,8 @@ function M.create_fsm_data(handlers)
                 state_handler = handlers.starting,
                 triggers = {
                     [M.trigger.disconnect] = "disconnecting",
-                    [M.trigger.launch_resp_ok] = "running",
-                    [M.trigger.launch_resp_error] = "disconnecting",
+                    [M.trigger.startup_ok] = "running",
+                    [M.trigger.startup_err] = "disconnecting",
                 }
             },
             running = {
@@ -60,8 +56,8 @@ function M.create_fsm_data(handlers)
             disconnecting = {
                 state_handler = handlers.disconnecting,
                 triggers = {
-                    [M.trigger.disconnect_resp_ok] = "ended",
-                    [M.trigger.disconnect_resp_err] = "ended",
+                    [M.trigger.disconnect_ok] = "ended",
+                    [M.trigger.disconnect_err] = "ended",
                     [M.trigger.disconnect_timeout] = "ended",
                 }
             },
