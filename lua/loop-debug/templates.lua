@@ -8,47 +8,50 @@ return {
             depends_on = {},
             type = "debug",
             command = "",
-            debugger = "",
+            debugger = "",           -- ← empty = user chooses
             request = "",
         }
     },
+
     -- ==================================================================
     -- Lua
     -- ==================================================================
     {
-        name = "lua - run",
+        name = "lua - run (local-lua-debugger)",
         task = {
-            name = "Debug",
+            name = "Debug Lua",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             command = "${file:lua}",
             cwd = "${wsdir}",
-            debugger = "lua",
+            debugger = "local-lua-debugger",
             request = "launch",
         }
     },
     {
-        name = "lua - attach",
+        name = "lua - attach (osv / remote)",
         task = {
-            name = "Debug",
+            name = "Attach to Lua (remote)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
-            debugger = "lua:remote",
+            debugger = "osv",
             request = "attach",
-            host = "127.0.0.1",
-            port = 8086,
+            debug_options = {
+                host = "127.0.0.1",
+                port = 8086,
+            },
         }
     },
 
     -- ==================================================================
-    -- LLDB
+    -- C/C++/Rust – LLDB
     -- ==================================================================
     {
         name = "lldb - run",
         task = {
-            name = "Debug",
+            name = "Debug (LLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -56,36 +59,34 @@ return {
             cwd = "${wsdir}",
             debugger = "lldb",
             request = "launch",
-            stop_on_entry = false,
-            run_in_terminal = true,
             debug_options = {
-                initCommands = {},
+                stopOnEntry = false,
+                runInTerminal = true,
             },
         }
     },
     {
         name = "lldb - attach",
         task = {
-            name = "Debug",
+            name = "Attach (LLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "lldb",
             request = "attach",
-            processId = "${select-pid}",
             debug_options = {
-                initCommands = {},
+                pid = "${select-pid}",
             },
         }
     },
 
     -- ==================================================================
-    -- GDB
+    -- C/C++/Rust – GDB
     -- ==================================================================
     {
         name = "gdb - run",
         task = {
-            name = "Debug",
+            name = "Debug (GDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -93,29 +94,34 @@ return {
             cwd = "${wsdir}",
             debugger = "gdb",
             request = "launch",
-            stop_on_entry = false,
+            debug_options = {
+                stopOnEntry = false,
+                runInTerminal = true,
+            },
         }
     },
     {
         name = "gdb - attach",
         task = {
-            name = "Debug",
+            name = "Attach (GDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "gdb",
             request = "attach",
-            processId = "${select-pid}",
+            debug_options = {
+                processId = "${select-pid}",
+            },
         }
     },
 
     -- ==================================================================
-    -- CodeLLDB
+    -- C/C++/Rust – CodeLLDB
     -- ==================================================================
     {
         name = "codelldb - run",
         task = {
-            name = "Debug",
+            name = "Debug (CodeLLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -123,9 +129,9 @@ return {
             cwd = "${wsdir}",
             debugger = "codelldb",
             request = "launch",
-            stop_on_entry = false,
-            run_in_terminal = true,
             debug_options = {
+                stopOnEntry = false,
+                runInTerminal = true,
                 sourceLanguages = { "cpp" },
             },
         }
@@ -133,23 +139,25 @@ return {
     {
         name = "codelldb - attach",
         task = {
-            name = "Debug",
+            name = "Attach (CodeLLDB)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "codelldb",
             request = "attach",
-            processId = "${select-pid}",
+            debug_options = {
+                pid = "${select-pid}",
+            },
         }
     },
 
     -- ==================================================================
-    -- Node.js
+    -- JavaScript / TypeScript / Node.js
     -- ==================================================================
     {
         name = "node - run",
         task = {
-            name = "Debug",
+            name = "Debug Node.js",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -157,8 +165,8 @@ return {
             cwd = "${wsdir}",
             debugger = "js-debug",
             request = "launch",
-            stop_on_entry = false,
             debug_options = {
+                stopOnEntry = false,
                 sourceMaps = true,
             },
         }
@@ -166,14 +174,14 @@ return {
     {
         name = "node - attach",
         task = {
-            name = "Debug",
+            name = "Attach to Node.js",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "js-debug",
             request = "attach",
-            port = "${prompt:Inspector port}",
             debug_options = {
+                port = "${prompt:Inspector port,9229}",
                 address = "127.0.0.1",
                 restart = true,
             },
@@ -186,7 +194,7 @@ return {
     {
         name = "python - run",
         task = {
-            name = "Debug",
+            name = "Debug Python",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
@@ -196,86 +204,57 @@ return {
             request = "launch",
             debug_options = {
                 justMyCode = false,
+                console = "integratedTerminal",
             },
         }
     },
     {
-        name = "python - attach",
+        name = "python - attach (remote)",
         task = {
-            name = "Debug",
+            name = "Attach Python (remote)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "debugpy:remote",
             request = "attach",
-            host = "127.0.0.1",
-            port = 0,
             debug_options = {
+                host = "127.0.0.1",
+                port = "${prompt:debugpy port,5678}",
                 justMyCode = false,
             },
         }
     },
 
     -- ==================================================================
-    -- Go
+    -- Go (delve)
     -- ==================================================================
     {
         name = "go - run",
         task = {
-            name = "Debug",
+            name = "Debug Go",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             cwd = "${wsdir}",
-            debugger = "go",
+            debugger = "delve",
             request = "launch",
+            debug_options = {
+                mode = "debug",
+                -- program = can be set automatically from cwd or you can add it
+            },
         }
     },
     {
         name = "go - attach",
         task = {
-            name = "Debug",
+            name = "Attach Go",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
-            debugger = "go",
+            debugger = "delve",
             request = "attach",
-            processId = "${select-pid}",
-        }
-    },
-
-    -- ==================================================================
-    -- Chrome
-    -- ==================================================================
-    {
-        name = "chrome - run",
-        task = {
-            name = "Launch",
-            if_running = "refuse",
-            depends_on = {},
-            type = "debug",
-            debugger = "chrome",
-            request = "launch",
             debug_options = {
-                url = "http://localhost:3000",
-                webRoot = "${wsdir}",
-                userDataDir = false,
-                sourceMaps = true,
-            },
-        }
-    },
-    {
-        name = "chrome - attach",
-        task = {
-            name = "Debug",
-            if_running = "refuse",
-            depends_on = {},
-            type = "debug",
-            debugger = "chrome",
-            request = "attach",
-            port = 9222,
-            debug_options = {
-                webRoot = "${wsdir}",
+                processId = "${select-pid}",
             },
         }
     },
@@ -286,47 +265,50 @@ return {
     {
         name = "bash - run",
         task = {
-            name = "Debug",
+            name = "Debug Bash",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             command = "${file}",
             cwd = "${wsdir}",
-            debugger = "bash",
+            debugger = "bash-debug-adapter",
             request = "launch",
         }
     },
 
     -- ==================================================================
-    -- PHP
+    -- PHP (Xdebug)
     -- ==================================================================
     {
-        name = "php - listen",
+        name = "php - listen (xdebug)",
         task = {
-            name = "Listen",
+            name = "Listen for Xdebug",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
-            debugger = "php",
+            debugger = "php-debug-adapter",
             request = "launch",
-            port = 9003,
             debug_options = {
-                pathMappings = { ["/var/www/html"] = "${wsdir}" },
+                port = 9003,
+                pathMappings = {
+                    ["/var/www/html"] = "${wsdir}",
+                },
             },
         }
     },
 
     -- ==================================================================
-    -- .NET
+    -- .NET (netcoredbg)
     -- ==================================================================
     {
         name = "netcoredbg - run",
         task = {
-            name = "Debug",
+            name = "Debug .NET",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             command = "${prompt:Select binary,./,file}",
+            cwd = "${wsdir}",
             debugger = "netcoredbg",
             request = "launch",
         }
@@ -334,13 +316,15 @@ return {
     {
         name = "netcoredbg - attach",
         task = {
-            name = "Debug",
+            name = "Attach .NET",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
             debugger = "netcoredbg",
             request = "attach",
-            processId = "${select-pid}",
+            debug_options = {
+                processId = "${select-pid}",
+            },
         }
     },
 
@@ -350,14 +334,16 @@ return {
     {
         name = "java - attach",
         task = {
-            name = "Debug",
+            name = "Attach Java (JDWP)",
             if_running = "refuse",
             depends_on = {},
             type = "debug",
-            debugger = "java",
+            debugger = "java-debug-server",
             request = "attach",
-            host = "127.0.0.1",
-            port = 5005,
+            debug_options = {
+                host = "127.0.0.1",
+                port = 5005,
+            },
         }
     },
 }

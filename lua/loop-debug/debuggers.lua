@@ -89,12 +89,22 @@ end
 
 ---@param base table
 ---@param task loopdebug.Task
+---@param except_list string[]?
 ---@return table
-local function _merge_debug_options(base, task)
+local function _merge_debug_options(base, task, except_list)
+    local except_map = nil
+    if except_list then
+        except_map = {}
+        for _, v in ipairs(except_list) do
+            except_map[v] = true
+        end
+    end
     local opts = vim.deepcopy(base)
     if task.debug_options and type(task.debug_options) == "table" then
         for k, v in pairs(task.debug_options) do
-            opts[k] = v
+            if not except_map or not except_map[k] then
+                opts[k] = v
+            end
         end
     end
     return opts
@@ -150,23 +160,27 @@ _debuggers["local-lua-debugger"] = {
 
 _debuggers["osv"] = {
     language = "lua",
+
     adapter_config = function(context)
+        local dbg = context.task.debug_options or {}
         return {
             adapter_id = "lua-remote-debugger",
             name = "Lua Remote Debugger",
             type = "server",
-            host = context.task.host or "127.0.0.1",
-            port = tonumber(context.task.port),
+            host = dbg.host or "127.0.0.1",
+            port = dbg.port and tonumber(dbg.port),
         }
     end,
+
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             request = "attach",
             type = "lua",
-            host = context.task.host or "127.0.0.1",
-            port = tonumber(context.task.port),
+            host = "127.0.0.1",
+            port = dbg.port and tonumber(dbg.port),
             cwd = _get_task_cwd(context),
-        }, context.task)
+        }, context.task, { "port" })
     end,
 }
 
@@ -191,15 +205,15 @@ _debuggers.lldb = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stop_on_entry or false,
-            runInTerminal = task.run_in_terminal ~= false,
+            runInTerminal = true,
         }, task)
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
-            pid = tonumber(context.task.processId),
+            pid = tonumber(dbg.pid),
             program = type(context.task.command) == "string" and context.task.command or nil,
-        }, context.task)
+        }, context.task, { "pid" })
     end,
 }
 
@@ -227,17 +241,17 @@ _debuggers.codelldb = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stop_on_entry or false,
-            runInTerminal = task.run_in_terminal ~= false,
+            runInTerminal = true,
         }, task)
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             name = "Attach (codelldb)",
             type = "codelldb",
             request = "attach",
-            pid = tonumber(context.task.processId),
-        }, context.task)
+            pid = tonumber(dbg.pid),
+        }, context.task, {"pid"})
     end,
 }
 
@@ -270,16 +284,16 @@ _debuggers.gdb = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopAtBeginningOfMainSubprogram = task.stop_on_entry or false,
-            runInTerminal = task.run_in_terminal ~= false,
+            runInTerminal = true,
         }, task)
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             request = "attach",
-            pid = tonumber(context.task.processId),
+            pid = tonumber(dbg.processId),
             cwd = _get_task_cwd(context),
-        }, context.task)
+        }, context.task, {"pid"})
     end,
 }
 
@@ -290,7 +304,8 @@ _debuggers["js-debug"] = {
     language = "javascript, typescript",
     start_hook = function(context, callback)
         local task = context.task
-        local port = (type(task.port) == "number" and task.port) or 0
+        local dbg = task.debug_options or {}
+        local port = (type(dbg.port) == "number" and dbg.port) or 0
         context.user_data.exit_handler = function(_)
             callback(false, "debug server stopped unexpectedly")
         end
@@ -351,12 +366,13 @@ _debuggers["js-debug"] = {
     end,
 
     adapter_config = function(context)
+        local dbg = context.task.debug_options or {}
         return {
             adapter_id = "js-debug-adapter",
             name = "js-debug",
             type = "server",
-            host = context.task.host or "::1",
-            port = tonumber(context.task.port) or 0,
+            host = dbg.host or "::1",
+            port = tonumber(dbg.port) or 0,
             cwd = _get_task_cwd(context),
         }
     end,
@@ -371,18 +387,18 @@ _debuggers["js-debug"] = {
             args = get_task_args(task),
             cwd = _get_task_cwd(context),
             env = _merge_env(task.env),
-            stopOnEntry = task.stop_on_entry or false,
         }, task)
     end,
 
     attach_args = function(context)
         local task = context.task
+        local dbg = task.debug_options or {}
         return _merge_debug_options({
             type = "pwa-node",
             request = "attach",
-            port = tonumber(task.port) or 0,
+            port = tonumber(dbg.port) or 0,
             cwd = _get_task_cwd(context),
-        }, task)
+        }, task, {"port"})
     end,
 }
 
@@ -428,23 +444,24 @@ _debuggers.debugpy = {
 _debuggers["debugpy:remote"] = {
     language = "python",
     adapter_config = function(context)
+        local dbg = context.task.debug_options or {}
         return {
             adapter_id = "debugpy",
             name = "debugpy",
             type = "server",
-            host = context.task.host or "127.0.0.1",
-            port = tonumber(context.task.port),
+            host = dbg.host or "127.0.0.1",
+            port = tonumber(dbg.port),
         }
     end,
     attach_args = function(context)
-        local task = context.task
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             request = "attach",
             connect = {
-                host = context.task.host or "127.0.0.1",
-                port = tonumber(context.task.port),
+                host = dbg.host or "127.0.0.1",
+                port = tonumber(dbg.port),
             }
-        }, task)
+        }, context.task, {"port"})
     end,
 }
 
@@ -472,10 +489,11 @@ _debuggers["delve"] = {
         }, task)
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             mode = "local",
-            processId = context.task.processId,
-        }, context.task)
+            processId = tonumber(dbg.processId),
+        }, context.task, {"processId"})
     end,
 }
 
@@ -539,12 +557,13 @@ _debuggers["php-debug-adapter"] = {
     end,
     launch_args = function(context)
         local task = context.task
+        local dbg = task.debug_options or {}
         return _merge_debug_options({
             name = "Listen for Xdebug",
             type = "php",
             request = "launch",
-            port = tonumber(task.port) or 9003,
-        }, task)
+            port = tonumber(dbg.port) or 9003,
+        }, task, {"port"})
     end,
 }
 
@@ -554,20 +573,22 @@ _debuggers["php-debug-adapter"] = {
 _debuggers["java-debug-server"] = {
     language = "java",
     adapter_config = function(context)
+        local dbg = context.task.debug_options or {}
         return {
             adapter_id = "jds",
             name = "java-debug-server",
             type = "server",
-            host = context.task.host or "127.0.0.1",
-            port = tonumber(context.task.port),
+            host = dbg.host or "127.0.0.1",
+            port = tonumber(dbg.port),
         }
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             request = "attach",
-            host = context.task.host or "127.0.0.1",
-            port = tonumber(context.task.port),
-        }, context.task)
+            host = dbg.host or "127.0.0.1",
+            port = tonumber(dbg.port),
+        }, context.task, {"port"})
     end,
 }
 
@@ -594,11 +615,12 @@ _debuggers.netcoredbg = {
         }, context.task)
     end,
     attach_args = function(context)
+        local dbg = context.task.debug_options or {}
         return _merge_debug_options({
             type = "coreclr",
             request = "attach",
-            processId = tonumber(context.task.processId),
-        }, context.task)
+            processId = tonumber(dbg.processId),
+        }, context.task, {"processId"})
     end,
 }
 

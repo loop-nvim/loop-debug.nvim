@@ -8,9 +8,7 @@ local schema = {
         "cwd",
         "debugger",
         "request",
-        "host",
-        "port",
-        "processId",
+        "terminate_on_disconnect",
         "debug_options",
     },
 
@@ -40,45 +38,12 @@ local schema = {
 
         cwd = {
             type = "string",
-            description = "Working directory for the debug session.",
+            description = "Working directory for the debug session. Defaults to `${wsdir}` if not specified",
         },
 
         ----------------------------------------------------------------------
-        -- Essential Connection Fields
+        -- Execution / lifecycle (top-level)
         ----------------------------------------------------------------------
-        processId = {
-            oneOf = {
-                { type = "number" },
-                { type = "string" },
-            },
-            description = "Process ID to attach to.",
-        },
-
-        host = {
-            type = "string",
-            description = "Hostname or IP address of the remote debug target.",
-        },
-
-        port = {
-            oneOf = {
-                { type = "number" },
-                { type = "string" },
-            },
-            description = "Port number of the remote debug target.",
-        },
-        ----------------------------------------------------------------------
-        -- Execution / lifecycle
-        ----------------------------------------------------------------------
-        stop_on_entry = {
-            type = "boolean",
-            description = "Pause execution immediately at program start.",
-        },
-
-        run_in_terminal = {
-            type = "boolean",
-            description = "Run the program in a terminal instead of a debugger console.",
-        },
-
         terminate_on_disconnect = {
             type = "boolean",
             description = "Terminate the debugged process when the debugger disconnects.",
@@ -100,8 +65,37 @@ local schema = {
             type = "object",
             additionalProperties = true,
             description = "Arbitrary key-value pairs passed specifically to the debugger backend.",
-        },
 
+            properties = {
+                ------------------------------------------------------------------
+                -- Connection
+                ------------------------------------------------------------------
+                host = {
+                    type = "string",
+                    description = "Hostname or IP address of the remote debug target.",
+                },
+
+                port = {
+                    oneOf = {
+                        { type = "number" },
+                        { type = "string" },
+                    },
+                    description = "Port number of the remote debug target.",
+                },
+                ------------------------------------------------------------------
+                -- DAP Execution Flags
+                ------------------------------------------------------------------
+                stopOnEntry = {
+                    type = "boolean",
+                    description = "Pause execution immediately at program start.",
+                },
+
+                runInTerminal = {
+                    type = "boolean",
+                    description = "Run the program in a terminal (when supported).",
+                },
+            },
+        },
     }
 }
 
