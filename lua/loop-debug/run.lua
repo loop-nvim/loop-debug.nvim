@@ -8,20 +8,6 @@ local breakpoints = require('loop-debug.breakpoints')
 local fntools = require('loop.tools.fntools')
 local logs = require('loop.logs')
 
-
----@param base table
----@param task loopdebug.Task
-local function _merge_debug_options(base, task)
-    if task.debug_options and type(task.debug_options) == "table" then
-        for k, v in pairs(task.debug_options) do
-            if not base[k] then
-                base[k] = v
-            end
-        end
-    end
-end
-
-
 ---@param task_name string
 ---@param on_exit fun(code : number)
 ---@return loop.job.debugjob.Tracker
@@ -127,15 +113,24 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
         return nil, ("no debugger config found for task.debugger '%s'"):format(task.debugger)
     end
 
+    if task.request == "launch" and not debugger.enrich_launch_args then
+        return nil, "debugger does not support launch"
+    end
+
+    if task.request == "attach" and not debugger.enrich_attach_args then
+        return nil, "debugger does not support attach"
+    end
+
+    ---@type loopdebug.TaskContext
+    local task_context = {
+        task = task,
+        ws_dir = ws_dir
+    }
+
     ---- debug adapter config ---
     ---@type loopdebug.AdapterConfig?
     local adapter_config
     if type(debugger.adapter_config) == "function" then
-        ---@type loopdebug.TaskContext
-        local task_context = {
-            task = task,
-            ws_dir = ws_dir
-        }
         local err_msg
         adapter_config, err_msg = debugger.adapter_config(task_context)
         if type(adapter_config) ~= "table" then
@@ -154,32 +149,18 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     end
 
     -- request config
-    local request_args
-    if task.request == "launch" then
-        request_args = debugger.launch_args or {}
-    else
-        request_args = debugger.attach_args or {}
-    end
+    local request_args = task.debug_options and vim.fn.deepcopy(task.debug_options) or {}
+    do
+        local enrich = (task.request == "launch")
+            and debugger.enrich_launch_args
+            or debugger.enrich_attach_args
 
-    if type(request_args) == "function" then
-        ---@type loopdebug.TaskContext
-        local task_context = {
-            task = task,
-            ws_dir = ws_dir
-        }
-        request_args = request_args(task_context)
-        if type(request_args) ~= "table" then
-            return nil, "debugger.request_args function must return a table"
+        if enrich then
+            local ok, err = enrich(request_args, task_context)
+            if ok == false then
+                return nil, err or "invalid debug configuration"
+            end
         end
-    else
-        -- deep copy because a badly coded hook may change the args
-        request_args = vim.deepcopy(request_args)
-    end
-
-    _merge_debug_options(request_args, task)
-    if debugger.args_postprocess then
-        local ok, err = debugger.args_postprocess(request_args, task.request)
-        if not ok and type(err) == "string" then return nil, err end
     end
 
     local terminate_on_disconnect = task.terminate_on_disconnect
@@ -191,7 +172,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     ---@type loop.DebugJob.StartArgs
     local start_args = {
         name = task.name,
-        enable_dap_log = (config.current.enable_dap_log ~= false),
+        enable_dap_log = (config.current.enable_dap_log == true),
         debug_args = {
             adapter = adapter_config,
             request = task.request,

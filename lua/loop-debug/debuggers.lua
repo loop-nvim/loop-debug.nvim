@@ -17,13 +17,12 @@ local config = require("loop-debug.config")
 
 ---@class loopdebug.Config.Debugger
 ---@field language string
----@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
----@field launch_args nil|table|fun(ctx:loopdebug.TaskContext):table
----@field attach_args nil|table|fun(ctx:loopdebug.TaskContext):table
 ---@field early_attach boolean?
+---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
+---@field enrich_launch_args (fun(args:table, ctx:loopdebug.TaskContext):boolean?,string?)?
+---@field enrich_attach_args (fun(args:table, ctx:loopdebug.TaskContext):boolean?,string?)?
 ---@field start_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun(ok:boolean,err:string|nil))
 ---@field end_hook nil|fun(ctx:loopdebug.Config.Debugger.HookContext,cb:fun())
----@field args_postprocess (fun(args:table,request:"launch"|"attach"):boolean,string?)?
 
 --------------------------------------------------------------------------------
 -- Internal Helpers
@@ -88,6 +87,36 @@ local function mason_bin(name)
     return name
 end
 
+local function fill_launch_defaults(args, ctx)
+    local task = ctx.task
+
+    args.request = args.request or "launch"
+    args.program = args.program or get_task_program(task)
+    args.args = args.args or get_task_args(task)
+    args.cwd = args.cwd or _get_task_cwd(ctx)
+    args.env = args.env or _merge_env(task.env)
+end
+
+local function fill_attach_defaults(args, ctx)
+    args.request = args.request or "attach"
+    args.cwd = args.cwd or _get_task_cwd(ctx)
+end
+
+local function normalize_numbers(args)
+    if args.port ~= nil then
+        args.port = tonumber(args.port)
+    end
+    if args.pid ~= nil then
+        args.pid = tonumber(args.pid)
+    end
+    if args.processId ~= nil then
+        args.processId = tonumber(args.processId)
+    end
+    if type(args.connect) == "table" and args.connect.port ~= nil then
+        args.connect.port = tonumber(args.connect.port)
+    end
+end
+
 --------------------------------------------------------------------------------
 -- Debugger Definitions
 --------------------------------------------------------------------------------
@@ -97,14 +126,17 @@ local _debuggers = {}
 
 ---@type table<string,loopdebug.Config.Debugger>
 local _user_debuggers = {}
--- ==================================================================
--- lua
+
 -- ==================================================================
 _debuggers["local-lua-debugger"] = {
     language = "lua",
+
     adapter_config = function(context)
-        local adapter_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
-            "extension", "extension", "debugAdapter.js")
+        local adapter_path = vim.fs.joinpath(
+            vim.fn.stdpath("data"),
+            "mason", "packages", "local-lua-debugger-vscode",
+            "extension", "extension", "debugAdapter.js"
+        )
         ---@diagnostic disable-next-line: undefined-field
         if not vim.uv.fs_stat(adapter_path) then
             return nil, ("local-lua-debugger-vscode debug adapter not found (%s)"):format(adapter_path)
@@ -116,23 +148,31 @@ _debuggers["local-lua-debugger"] = {
             command = { "node", adapter_path },
             cwd = _get_task_cwd(context),
             env = _merge_env({
-                LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
-                    "extension", "debugger", "?.lua") .. ";;"
+                LUA_PATH = vim.fs.joinpath(
+                    vim.fn.stdpath("data"),
+                    "mason", "packages", "local-lua-debugger-vscode",
+                    "extension", "debugger", "?.lua"
+                ) .. ";;"
             }),
         }
     end,
-    launch_args = function(context)
-        return {
-            type = "lua-local",
-            request = "launch",
-            name = "Debug",
-            cwd = _get_task_cwd(context),
-            program = {
-                lua = vim.fn.exepath("lua"),
-                file = get_task_program(context.task),
-                communication = 'stdio',
-            },
+
+    enrich_launch_args = function(args, ctx)
+        -- We do NOT call fill_launch_defaults here,
+        -- because this debugger uses a special `program` structure.
+
+        args.type = args.type or "lua-local"
+        args.request = "launch"
+        args.name = args.name or "Debug"
+        args.cwd = args.cwd or _get_task_cwd(ctx)
+
+        args.program = args.program or {
+            lua = vim.fn.exepath("lua"),
+            file = get_task_program(ctx.task),
+            communication = "stdio",
         }
+
+        return true
     end,
 }
 
@@ -141,6 +181,7 @@ _debuggers["osv"] = {
 
     adapter_config = function(context)
         local dbg = context.task.debug_options or {}
+
         return {
             adapter_id = "lua-remote-debugger",
             name = "Lua Remote Debugger",
@@ -150,17 +191,17 @@ _debuggers["osv"] = {
         }
     end,
 
-    attach_args = function(context)
-        return {
-            request = "attach",
-            type = "lua",
-            host = "127.0.0.1",
-            cwd = _get_task_cwd(context),
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        local dbg = ctx.task.debug_options or {}
+
+        args.type = args.type or "lua"
+        args.request = "attach"
+        args.host = args.host or dbg.host or "127.0.0.1"
+
+        normalize_numbers(args)
+
         return true
     end
 }
@@ -170,6 +211,7 @@ _debuggers["osv"] = {
 -- ==================================================================
 _debuggers.lldb = {
     language = "c, cpp, rust",
+
     adapter_config = function(context)
         return {
             adapter_id = "lldb-dap",
@@ -179,36 +221,36 @@ _debuggers.lldb = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        return {
-            program = get_task_program(task),
-            args = get_task_args(task),
-            cwd = _get_task_cwd(context),
-            env = _merge_env(task.env),
-            runInTerminal = true,
-        }
-    end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            program = type(context.task.command) == "string" and context.task.command or nil,
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        if not args.pid then return false, "pid required" end
-        args.pid = args.pid and tonumber(args.pid) or nil
-        return true
-    end
 
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.runInTerminal = args.runInTerminal ~= false
+
+        normalize_numbers(args)
+        return true
+    end,
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        if not args.pid then
+            return false, "pid required"
+        end
+
+        normalize_numbers(args)
+
+        if not args.pid then
+            return false, "invalid pid"
+        end
+
+        return true
+    end,
 }
 
--- ==================================================================
--- c, cpp, rust (codelldb)
--- ==================================================================
 _debuggers.codelldb = {
     language = "c, cpp, rust",
+
     adapter_config = function(context)
         return {
             adapter_id = "codelldb",
@@ -218,51 +260,55 @@ _debuggers.codelldb = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        return {
-            name = "Launch (codelldb)",
-            type = "codelldb",
-            request = "launch",
-            program = get_task_program(task),
-            args = get_task_args(task),
-            cwd = _get_task_cwd(context),
-            env = _merge_env(task.env),
-            runInTerminal = true,
-        }
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.name = args.name or "Launch (codelldb)"
+        args.type = args.type or "codelldb"
+        args.request = "launch"
+        args.runInTerminal = args.runInTerminal ~= false
+
+        normalize_numbers(args)
+        return true
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            name = "Attach (codelldb)",
-            type = "codelldb",
-            request = "attach",
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        if not args.pid then return false, "pid required" end
-        args.pid = args.pid and tonumber(args.pid) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        args.name = args.name or "Attach (codelldb)"
+        args.type = args.type or "codelldb"
+        args.request = "attach"
+
+        if not args.pid then
+            return false, "pid required"
+        end
+
+        normalize_numbers(args)
+
+        if not args.pid then
+            return false, "invalid pid"
+        end
+
         return true
     end
 }
 
--- ==================================================================
--- c, cpp, rust (gdb)
--- ==================================================================
----@type loopdebug.Config.Debugger
 _debuggers.gdb = {
     language = "c, cpp, rust",
     early_attach = true,
+
     adapter_config = function(context)
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
         local command = { "gdb", "--interpreter=dap" }
+
         ---@diagnostic disable-next-line: undefined-field
         if vim.uv.fs_stat(gdbinit_path) then
             table.insert(command, "-ix")
             table.insert(command, gdbinit_path)
         end
+
         return {
             adapter_id = "gdb",
             name = "GDB (via DAP)",
@@ -271,36 +317,39 @@ _debuggers.gdb = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        return {
-            program = get_task_program(task),
-            args = get_task_args(task),
-            cwd = _get_task_cwd(context),
-            env = _merge_env(task.env),
-            runInTerminal = true,
-        }
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.request = "launch"
+        args.runInTerminal = args.runInTerminal ~= false
+
+        normalize_numbers(args)
+        return true
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            request = "attach",
-            cwd = _get_task_cwd(context),
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        if not args.pid then return false, "pid required" end
-        args.pid = args.pid and tonumber(args.pid) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        args.request = "attach"
+
+        if not args.pid then
+            return false, "pid required"
+        end
+
+        normalize_numbers(args)
+
+        if not args.pid then
+            return false, "invalid pid"
+        end
+
         return true
     end
 }
 
--- ==================================================================
--- javascript, typescript
--- ==================================================================
 _debuggers["js-debug"] = {
     language = "javascript, typescript",
+
     start_hook = function(context, callback)
         local task = context.task
         local dbg = task.debug_options or {}
@@ -376,40 +425,31 @@ _debuggers["js-debug"] = {
         }
     end,
 
-    launch_args = function(context)
-        local task = context.task
-        return {
-            type = "pwa-node",
-            request = "launch",
-            runtimeExecutable = "node",
-            program = get_task_program(task),
-            args = get_task_args(task),
-            cwd = _get_task_cwd(context),
-            env = _merge_env(task.env),
-        }
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.type = args.type or "pwa-node"
+        args.request = "launch"
+        args.runtimeExecutable = args.runtimeExecutable or "node"
+
+        normalize_numbers(args)
+        return true
     end,
 
-    attach_args = function(context)
-        local task = context.task
-        local dbg = task.debug_options or {}
-        return {
-            type = "pwa-node",
-            request = "attach",
-            cwd = _get_task_cwd(context),
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        args.type = args.type or "pwa-node"
+        args.request = "attach"
+
+        normalize_numbers(args)
         return true
     end
 }
 
--- ==================================================================
--- python
--- ==================================================================
 _debuggers.debugpy = {
     language = "python",
+
     adapter_config = function(context)
         local function python_bin()
             local mason_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "debugpy", "venv", "bin",
@@ -432,20 +472,20 @@ _debuggers.debugpy = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        return {
-            program = get_task_program(task),
-            args = get_task_args(task),
-            cwd = _get_task_cwd(context),
-            env = _merge_env(task.env),
-            console = "integratedTerminal",
-        }
-    end,
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.console = args.console or "integratedTerminal"
+
+        normalize_numbers(args)
+        return true
+    end
 }
 
 _debuggers["debugpy:remote"] = {
     language = "python",
+
     adapter_config = function(context)
         local dbg = context.task.debug_options or {}
         return {
@@ -456,27 +496,23 @@ _debuggers["debugpy:remote"] = {
             port = tonumber(dbg.port),
         }
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            request = "attach",
-            connect = {
-                host = dbg.host or "127.0.0.1",
-            }
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        local dbg = ctx.task.debug_options or {}
+
+        args.connect = args.connect or {}
+        args.connect.host = args.connect.host or dbg.host or "127.0.0.1"
+
+        normalize_numbers(args)
         return true
     end
 }
 
--- ==================================================================
--- go
--- ==================================================================
 _debuggers["delve"] = {
     language = "go",
+
     adapter_config = function(context)
         return {
             adapter_id = "delve",
@@ -486,35 +522,40 @@ _debuggers["delve"] = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        return {
-            mode = "debug",
-            program = task.cwd or _get_task_cwd(context),
-            env = _merge_env(task.env),
-            dlvToolPath = mason_bin("delve"),
-        }
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.mode = args.mode or "debug"
+        args.program = args.program or (ctx.task.cwd or _get_task_cwd(ctx))
+        args.dlvToolPath = args.dlvToolPath or mason_bin("delve")
+
+        normalize_numbers(args)
+        return true
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            mode = "local",
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        if not args.processId then return false, "processId required" end
-        args.processId = args.processId and tonumber(args.processId) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        args.mode = args.mode or "local"
+
+        if not args.processId then
+            return false, "processId required"
+        end
+
+        normalize_numbers(args)
+
+        if not args.processId then
+            return false, "invalid processId"
+        end
+
         return true
     end
-
 }
 
--- ==================================================================
--- bash
--- ==================================================================
 _debuggers["bash-debug-adapter"] = {
     language = "bash",
+
     adapter_config = function(context)
         return {
             adapter_id = "bash-debug-adapter",
@@ -524,41 +565,36 @@ _debuggers["bash-debug-adapter"] = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
         local mason_opt_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "opt", "bashdb")
         local bashdb_exe = vim.fs.joinpath(mason_opt_path, "bashdb")
-        local bashdb_lib = vim.fs.joinpath(mason_opt_path)
-        local final_args = get_task_args(task) or {}
-        local path_to_bashdb = "bashdb"
+        local bashdb_lib = mason_opt_path
+
         ---@diagnostic disable-next-line: undefined-field
-        if vim.uv.fs_stat(bashdb_exe) then
-            path_to_bashdb = bashdb_exe
-        end
-        return {
-            name = "Launch Bash Script",
-            type = "bashdb",
-            request = "launch",
-            program = get_task_program(task),
-            args = final_args,
-            cwd = _get_task_cwd(context),
-            pathBash = "bash",
-            pathBashdb = path_to_bashdb,
-            pathBashdbLib = bashdb_lib,
-            pathCat = "cat",
-            pathMkfifo = "mkfifo",
-            pathPkill = "pkill",
-            env = _merge_env(task.env),
-            terminalKind = "integrated",
-        }
-    end,
+        local path_to_bashdb = vim.uv.fs_stat(bashdb_exe) and bashdb_exe or "bashdb"
+
+        args.name = args.name or "Launch Bash Script"
+        args.type = "bashdb"
+        args.request = "launch"
+        args.pathBash = args.pathBash or "bash"
+        args.pathBashdb = args.pathBashdb or path_to_bashdb
+        args.pathBashdbLib = args.pathBashdbLib or bashdb_lib
+        args.pathCat = args.pathCat or "cat"
+        args.pathMkfifo = args.pathMkfifo or "mkfifo"
+        args.pathPkill = args.pathPkill or "pkill"
+        args.terminalKind = args.terminalKind or "integrated"
+
+        normalize_numbers(args)
+        return true
+    end
 }
 
--- ==================================================================
--- php
--- ==================================================================
 _debuggers["php-debug-adapter"] = {
     language = "php",
+
     adapter_config = function(context)
         return {
             adapter_id = "php-debug-adapter",
@@ -568,27 +604,22 @@ _debuggers["php-debug-adapter"] = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        local task = context.task
-        local dbg = task.debug_options or {}
-        return {
-            name = "Listen for Xdebug",
-            type = "php",
-            request = "launch",
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.name = args.name or "Listen for Xdebug"
+        args.type = args.type or "php"
+        args.request = "launch"
+
+        normalize_numbers(args)
         return true
     end
 }
 
--- ==================================================================
--- java
--- ==================================================================
 _debuggers["java-debug-server"] = {
     language = "java",
+
     adapter_config = function(context)
         local dbg = context.task.debug_options or {}
         return {
@@ -599,25 +630,23 @@ _debuggers["java-debug-server"] = {
             port = tonumber(dbg.port),
         }
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            request = "attach",
-            host = dbg.host or "127.0.0.1",
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        local dbg = ctx.task.debug_options or {}
+
+        args.request = "attach"
+        args.host = args.host or dbg.host or "127.0.0.1"
+
+        normalize_numbers(args)
         return true
     end
 }
 
--- ==================================================================
--- csharp, fsharp
--- ==================================================================
 _debuggers.netcoredbg = {
     language = "csharp, fsharp",
+
     adapter_config = function(context)
         return {
             adapter_id = "netcoredbg",
@@ -627,25 +656,35 @@ _debuggers.netcoredbg = {
             cwd = _get_task_cwd(context),
         }
     end,
-    launch_args = function(context)
-        return {
-            type = "coreclr",
-            request = "launch",
-            program = type(context.task.command) == "string" and context.task.command or nil,
-            env = _merge_env(context.task.env),
-        }
+
+    enrich_launch_args = function(args, ctx)
+        fill_launch_defaults(args, ctx)
+
+        args.type = args.type or "coreclr"
+        args.request = "launch"
+        args.program = args.program
+            or (type(ctx.task.command) == "string" and ctx.task.command or nil)
+
+        normalize_numbers(args)
+        return true
     end,
-    attach_args = function(context)
-        local dbg = context.task.debug_options or {}
-        return {
-            type = "coreclr",
-            request = "attach",
-        }
-    end,
-    args_postprocess = function(args, request)
-        if request == "launch" then return true end
-        if not args.processId then return false, "processId required" end
-        args.processId = args.processId and tonumber(args.processId) or nil
+
+    enrich_attach_args = function(args, ctx)
+        fill_attach_defaults(args, ctx)
+
+        args.type = args.type or "coreclr"
+        args.request = "attach"
+
+        if not args.processId then
+            return false, "processId required"
+        end
+
+        normalize_numbers(args)
+
+        if not args.processId then
+            return false, "invalid processId"
+        end
+
         return true
     end
 }
