@@ -8,7 +8,7 @@ return {
             depends_on = {},
             type = "debug",
             command = "",
-            debugger = "",           -- ← empty = user chooses
+            debugger = "",
             request = "",
         }
     },

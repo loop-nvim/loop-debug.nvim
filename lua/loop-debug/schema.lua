@@ -65,36 +65,6 @@ local schema = {
             type = "object",
             additionalProperties = true,
             description = "Arbitrary key-value pairs passed specifically to the debugger backend.",
-
-            properties = {
-                ------------------------------------------------------------------
-                -- Connection
-                ------------------------------------------------------------------
-                host = {
-                    type = "string",
-                    description = "Hostname or IP address of the remote debug target.",
-                },
-
-                port = {
-                    oneOf = {
-                        { type = "number" },
-                        { type = "string" },
-                    },
-                    description = "Port number of the remote debug target.",
-                },
-                ------------------------------------------------------------------
-                -- DAP Execution Flags
-                ------------------------------------------------------------------
-                stopOnEntry = {
-                    type = "boolean",
-                    description = "Pause execution immediately at program start.",
-                },
-
-                runInTerminal = {
-                    type = "boolean",
-                    description = "Run the program in a terminal (when supported).",
-                },
-            },
         },
     }
 }
