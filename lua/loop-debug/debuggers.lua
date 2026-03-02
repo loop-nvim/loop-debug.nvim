@@ -197,7 +197,8 @@ _debuggers.lldb = {
     end,
     args_postprocess = function(args, request)
         if request == "launch" then return true end
-        args.port = args.port and tonumber(args.port) or nil
+        if not args.pid then return false, "pid required" end
+        args.pid = args.pid and tonumber(args.pid) or nil
         return true
     end
 
