@@ -28,17 +28,6 @@ local config = require("loop-debug.config")
 -- Internal Helpers
 --------------------------------------------------------------------------------
 
-local _protected_keys = {
-    request = true,
-    type = true,
-    program = true,
-    args = true,
-    cwd = true,
-    processId = true,
-    host = true,
-    port = true,
-}
-
 ---@param task loopdebug.Task
 ---@return string|nil
 local function get_task_program(task)
@@ -105,9 +94,7 @@ local function _merge_debug_options(base, task)
     local opts = vim.deepcopy(base)
     if task.debug_options and type(task.debug_options) == "table" then
         for k, v in pairs(task.debug_options) do
-            if not _protected_keys[k] then
-                opts[k] = v
-            end
+            opts[k] = v
         end
     end
     return opts
@@ -127,7 +114,7 @@ local _user_debuggers = {}
 -- ==================================================================
 _debuggers["local-lua-debugger"] = {
     language = "lua",
-    adapter_config = function(ctx)
+    adapter_config = function(context)
         local adapter_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
             "extension", "extension", "debugAdapter.js")
         ---@diagnostic disable-next-line: undefined-field
@@ -139,6 +126,7 @@ _debuggers["local-lua-debugger"] = {
             name = "Local Lua Debugger",
             type = "executable",
             command = { "node", adapter_path },
+            cwd = _get_task_cwd(context),
             env = _merge_env({
                 LUA_PATH = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "local-lua-debugger-vscode",
                     "extension", "debugger", "?.lua") .. ";;"
@@ -187,12 +175,13 @@ _debuggers["osv"] = {
 -- ==================================================================
 _debuggers.lldb = {
     language = "c, cpp, rust",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "lldb-dap",
             name = "LLDB (via lldb-dap)",
             type = "executable",
             command = { mason_bin("lldb-dap") },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -219,12 +208,13 @@ _debuggers.lldb = {
 -- ==================================================================
 _debuggers.codelldb = {
     language = "c, cpp, rust",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "codelldb",
             name = "codelldb",
             type = "executable",
             command = { mason_bin("codelldb") },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -256,7 +246,7 @@ _debuggers.codelldb = {
 -- ==================================================================
 _debuggers.gdb = {
     language = "c, cpp, rust",
-    adapter_config = function()
+    adapter_config = function(context)
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")
         local command = { "gdb", "--interpreter=dap" }
@@ -270,6 +260,7 @@ _debuggers.gdb = {
             name = "GDB (via DAP)",
             type = "executable",
             command = command,
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -400,7 +391,7 @@ _debuggers["js-debug"] = {
 -- ==================================================================
 _debuggers.debugpy = {
     language = "python",
-    adapter_config = function()
+    adapter_config = function(context)
         local function python_bin()
             local mason_path = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "packages", "debugpy", "venv", "bin",
                 "python")
@@ -419,6 +410,7 @@ _debuggers.debugpy = {
             name = "debugpy",
             type = "executable",
             command = { python_bin(), "-m", "debugpy.adapter" },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -461,12 +453,13 @@ _debuggers["debugpy:remote"] = {
 -- ==================================================================
 _debuggers["delve"] = {
     language = "go",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "delve",
             name = "Delve (dlv)",
             type = "executable",
             command = { mason_bin("delve"), "dap", "-l", "127.0.0.1:0" },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -487,46 +480,17 @@ _debuggers["delve"] = {
 }
 
 -- ==================================================================
--- javascript (chrome)
--- ==================================================================
-_debuggers["chrome-debug-adapter"] = {
-    language = "javascript",
-    adapter_config = function()
-        return {
-            adapter_id = "chrome-debug-adapter",
-            name = "Chrome",
-            type = "executable",
-            command = { mason_bin("chrome-debug-adapter") },
-        }
-    end,
-    launch_args = function(context)
-        return _merge_debug_options({
-            type = "chrome",
-            request = "launch",
-            webRoot = context.task.cwd or _get_task_cwd(context),
-        }, context.task)
-    end,
-    attach_args = function(context)
-        return _merge_debug_options({
-            type = "chrome",
-            request = "attach",
-            port = tonumber(context.task.port) or 9222,
-            webRoot = context.task.cwd or _get_task_cwd(context),
-        }, context.task)
-    end,
-}
-
--- ==================================================================
 -- bash
 -- ==================================================================
 _debuggers["bash-debug-adapter"] = {
     language = "bash",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "bash-debug-adapter",
             name = "bashdb",
             type = "executable",
             command = { mason_bin("bash-debug-adapter") },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -564,12 +528,13 @@ _debuggers["bash-debug-adapter"] = {
 -- ==================================================================
 _debuggers["php-debug-adapter"] = {
     language = "php",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "php-debug-adapter",
             name = "vscode-php-debug",
             type = "executable",
             command = { mason_bin("php-debug") },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
@@ -611,13 +576,13 @@ _debuggers["java-debug-server"] = {
 -- ==================================================================
 _debuggers.netcoredbg = {
     language = "csharp, fsharp",
-    adapter_config = function()
+    adapter_config = function(context)
         return {
             adapter_id = "netcoredbg",
             name = "netcoredbg",
             type = "executable",
-            command = { mason_bin("netcoredbg") },
-            args = { "--interpreter=vscode" },
+            command = { mason_bin("netcoredbg"), "--interpreter=vscode" },
+            cwd = _get_task_cwd(context),
         }
     end,
     launch_args = function(context)
