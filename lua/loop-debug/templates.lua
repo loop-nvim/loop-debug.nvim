@@ -223,9 +223,11 @@ return {
             debugger = "debugpy:remote",
             request = "attach",
             debug_options = {
-                host = "127.0.0.1",
-                port = "${prompt:debugpy port,5678}",
-                justMyCode = false,
+                connect = {
+                    host = "127.0.0.1",
+                    port = "${prompt:debugpy port,5678}",
+                    justMyCode = false,
+                }
             },
         }
     },
