@@ -84,7 +84,7 @@ end
 ---@param name string
 ---@return loopdebug.Config.Debugger?
 function M.get_debugger_config(name)
-    require("loop-debug.debuggers").get_debugger_config(name)
+    return require("loop-debug.debuggers").get_debugger_config(name)
 end
 
 ---@param name string
