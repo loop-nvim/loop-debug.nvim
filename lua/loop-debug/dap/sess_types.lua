@@ -55,7 +55,6 @@ error('Cannot require a meta file')
 ---@field request      "launch" | "attach"
 ---@field request_args  table?
 ---@field terminate_debuggee boolean?
----@field early_attach boolean? -- some adapters need this
 
 ---@class loopdebug.session.Args
 ---@field debug_args loopdebug.session.DebugArgs|nil

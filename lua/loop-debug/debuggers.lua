@@ -17,7 +17,6 @@ local config = require("loop-debug.config")
 
 ---@class loopdebug.Config.Debugger
 ---@field language string
----@field early_attach boolean?
 ---@field adapter_config loopdebug.AdapterConfig|(fun(ctx:loopdebug.TaskContext):loopdebug.AdapterConfig?,string?)
 ---@field enrich_launch_args (fun(args:table, ctx:loopdebug.TaskContext):boolean?,string?)?
 ---@field enrich_attach_args (fun(args:table, ctx:loopdebug.TaskContext):boolean?,string?)?
@@ -260,8 +259,6 @@ _debuggers.codelldb = {
 
 _debuggers.gdb = {
     language = "c, cpp, rust",
-    early_attach = true,
-
     adapter_config = function(context)
         local home = os.getenv("HOME") or "~"
         local gdbinit_path = vim.fs.joinpath(home, ".gdbinit")

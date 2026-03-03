@@ -212,7 +212,6 @@ function Session:start(args)
 
     local adapter = args.debug_args.adapter
 
-    self._early_attach = args.debug_args.early_attach == true
     self._capabilities = {}
     self._process_ended = false
     self._tracker = args.tracker
@@ -572,9 +571,7 @@ end
 
 function Session:_on_initialized_event(event)
     self:_send_configuration(function(success)
-        if success then
-            self._fsm:trigger(fsmdata.trigger.intialize_ok)
-        else
+        if not success then
             self:_trace_notification("session initialization failed", "error")
             self._fsm:trigger(fsmdata.trigger.disconnect)
         end
@@ -767,11 +764,6 @@ function Session:_send_configuration(on_complete)
             on_complete(false)
             return
         end
-        if self._early_attach and target.request == "attach" then
-            -- we don't wait for the response, in _early_attach mode (gdb),
-            -- the debugger will not respond until we send configurationDone
-            self:_send_attach(function() end)
-        end
         self:_send_configurationDone(on_complete)
     end)
 end
@@ -883,10 +875,6 @@ function Session:_on_starting_state()
     end
 
     if target.request == "attach" then
-        if self._early_attach then
-            on_complete(true)
-            return
-        end
         self:_send_attach(on_complete)
         return
     end
