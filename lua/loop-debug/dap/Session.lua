@@ -15,6 +15,9 @@ local fsmdata = require('loop-debug.dap.fsmdata')
 ---@field _output_handler fun(msg_body:table)
 ---@field _on_exit fun(code:number)
 ---@field _tracker loop.session.Tracker
+---@field _configuration_sent boolean
+---@field _intialized_received boolean
+---@field _launch_attach_sent boolean
 ---@field _can_send_breakpoints boolean
 ---@field _source_breakpoints loopdebug.session.SourceBreakpointsData
 ---@field _subsession_id number
@@ -570,12 +573,19 @@ function Session:_on_output_event(event)
 end
 
 function Session:_on_initialized_event(event)
-    self:_send_configuration(function(success)
-        if not success then
-            self:_trace_notification("session initialization failed", "error")
-            self._fsm:trigger(fsmdata.trigger.disconnect)
-        end
-    end)
+    self._intialized_received = true
+    self:_try_send_configuration()
+end
+
+function Session:_try_send_configuration()
+    if self._launch_attach_sent and self._intialized_received and not self._configuration_sent then
+        self:_send_configuration(function(success)
+            if not success then
+                self:_trace_notification("session configuration phase failed", "error")
+                self._fsm:trigger(fsmdata.trigger.disconnect)
+            end
+        end)
+    end
 end
 
 ---@param event loopdebug.proto.ThreadEvent|nil
@@ -755,6 +765,13 @@ end
 
 ---@param on_complete fun(success:boolean)
 function Session:_send_configuration(on_complete)
+    if self._configuration_sent then
+        self._log:error('Configuration already sent')
+        on_complete(false)
+        return
+    end
+    self._configuration_sent = true
+
     local target = self._args.debug_args
     assert(target)
 
@@ -869,18 +886,23 @@ function Session:_on_starting_state()
         end
     end
 
+    local sent
     if target.request == "launch" then
         self:_send_launch(on_complete)
-        return
-    end
-
-    if target.request == "attach" then
+        sent = true
+    elseif target.request == "attach" then
         self:_send_attach(on_complete)
-        return
+        sent = true
     end
 
-    self._log:error("handled request type: " .. tostring(target.request))
-    on_complete(false)
+    if sent then
+        -- if initialized is already received, send the configuration without waiting for the launch/attach response
+        self._launch_attach_sent = true
+        self:_try_send_configuration()
+    else
+        self._log:error("handled request type: " .. tostring(target.request))
+        on_complete(false)
+    end
 end
 
 function Session:_on_running_state()
