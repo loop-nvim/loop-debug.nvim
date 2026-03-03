@@ -294,7 +294,6 @@ function M.show()
                 return -- Ignore floating windows
             end
             vim.schedule(function()
-                vim.notify("apply layout after close")
                 _apply_layout()
             end)
         end,

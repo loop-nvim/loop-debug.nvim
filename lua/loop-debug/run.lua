@@ -113,14 +113,6 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
         return nil, ("no debugger config found for task.debugger '%s'"):format(task.debugger)
     end
 
-    if task.request == "launch" and not debugger.enrich_launch_args then
-        return nil, "debugger does not support launch"
-    end
-
-    if task.request == "attach" and not debugger.enrich_attach_args then
-        return nil, "debugger does not support attach"
-    end
-
     ---@type loopdebug.TaskContext
     local task_context = {
         task = task,
@@ -151,10 +143,12 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     -- request config
     local request_args = task.debug_options and vim.fn.deepcopy(task.debug_options) or {}
     do
-        local enrich = (task.request == "launch")
-            and debugger.enrich_launch_args
-            or debugger.enrich_attach_args
-
+        local enrich
+        if (task.request == "launch") then
+            enrich = debugger.enrich_launch_args
+        else
+            enrich = debugger.enrich_attach_args
+        end
         if enrich then
             local ok, err = enrich(request_args, task_context)
             if ok == false then

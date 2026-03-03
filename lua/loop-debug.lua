@@ -82,10 +82,15 @@ function M.init()
 end
 
 ---@param name string
----@param based_on string
+---@return loopdebug.Config.Debugger?
+function M.get_debugger_config(name)
+    require("loop-debug.debuggers").get_debugger_config(name)
+end
+
+---@param name string
 ---@param debugger_config loopdebug.Config.Debugger
-function M.register_debugger(name, based_on, debugger_config)
-    require("loop-debug.debuggers").register_debugger(name, based_on, debugger_config)
+function M.register_debugger(name, debugger_config)
+    require("loop-debug.debuggers").register_debugger(name, debugger_config)
 end
 
 return M

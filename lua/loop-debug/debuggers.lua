@@ -635,11 +635,10 @@ function M.get_debugger(name)
 end
 
 ---@param name string
----@param debugger_config loopdebug.Config.Debugger
-function M.extend_debugger(name, debugger_config)
+---@return loopdebug.Config.Debugger?
+function M.get_debugger_config(name)
     local existing = _user_debuggers[name] or _debuggers[name]
-    assert(existing, "Cannot extend non-existing debugger: " .. tostring(name))
-    _user_debuggers[name] = vim.tbl_deep_extend('force', existing, debugger_config)
+    return existing and vim.fn.deepcopy(existing) or nil
 end
 
 ---@param name string
