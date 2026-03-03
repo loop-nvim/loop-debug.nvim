@@ -115,7 +115,7 @@ return {
             debugger = "gdb",
             request = "attach",
             debug_options = {
-                processId = "${select-pid}",
+                pid = "${select-pid}",
             },
         }
     },
