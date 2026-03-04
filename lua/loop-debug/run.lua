@@ -128,12 +128,12 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
         if type(adapter_config) ~= "table" then
             return nil, err_msg or "debugger.adapter_config function error"
         end
-    else
-        -- deep copy because a badly coded hook may change the config
-        ---@type loopdebug.AdapterConfig
-        ---@diagnostic disable-next-line: assign-type-mismatch, param-type-mismatch
-        adapter_config = vim.deepcopy(debugger.adapter_config)
     end
+
+    -- deep copy because we may change cwd and because a badly coded hook may change the config
+    ---@type loopdebug.AdapterConfig
+    ---@diagnostic disable-next-line: assign-type-mismatch, param-type-mismatch
+    adapter_config = vim.deepcopy(debugger.adapter_config)
 
     adapter_config.cwd = adapter_config.cwd or ws_dir
     if not adapter_config.cwd then
