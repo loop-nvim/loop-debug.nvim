@@ -107,8 +107,8 @@ end
 
 ---@param view loopdebug.events.CurrentViewUpdate
 function StackTrace:_update_data(view)
-    if self._antiflicker_timer and self._antiflicker_timer:is_active() then
-        self._antiflicker_timer:stop()
+    if self._antiflicker_timer then
+        if self._antiflicker_timer:is_active() then self._antiflicker_timer:stop() end
         self._antiflicker_timer:close()
         self._antiflicker_timer = nil
     end

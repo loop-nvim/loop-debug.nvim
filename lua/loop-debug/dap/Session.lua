@@ -923,8 +923,8 @@ function Session:_on_disconnecting_state()
     self._base_session:request_disconnect({
         terminateDebuggee = terminate_debuggee
     }, function(err, body)
-        if timeout_timer:is_active() then
-            timeout_timer:stop()
+        if timeout_timer then
+            if timeout_timer:is_active() then timeout_timer:stop() end
             timeout_timer:close()
         end
         self._fsm:trigger(err == nil and fsmdata.trigger.disconnect_ok or fsmdata.trigger.disconnect_err)

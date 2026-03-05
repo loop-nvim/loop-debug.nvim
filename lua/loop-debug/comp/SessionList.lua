@@ -99,8 +99,8 @@ function SessionListComp:init()
         on_session_removed = function(id)
             self._sessions[id] = nil
             local timer = self._deferred_update_timers[id]
-            if timer and timer:is_active() then
-                timer:stop()
+            if timer then
+                if timer:is_active() then timer:stop() end
                 timer:close()
             end
             self._deferred_update_timers[id] = nil
@@ -120,8 +120,8 @@ function SessionListComp:dispose()
     for _, timer in pairs(self._deferred_update_timers) do
         if timer:is_active() then
             timer:stop()
-            timer:close()
         end
+        timer:close()
     end
     self._deferred_update_timers = {}
 end

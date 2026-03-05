@@ -59,8 +59,8 @@ local function _set_file_extmark(id, filepath, line, col, opts)
 end
 
 local function _cancel_deferred_remove_locals_virttext()
-    if _vars_clear_timer and _vars_clear_timer:is_active() then
-        _vars_clear_timer:stop()
+    if _vars_clear_timer then
+        if _vars_clear_timer:is_active() then _vars_clear_timer:stop() end
         _vars_clear_timer:close()
         _vars_clear_timer = nil
     end
