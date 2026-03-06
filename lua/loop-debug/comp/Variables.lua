@@ -1,7 +1,7 @@
 local class        = require('loop.tools.class')
 local floatwin     = require('loop.tools.floatwin')
 local ItemTreeComp = require('loop.comp.ItemTree')
-local config       = require('loop-debug.config')
+local config       = require('loop-debug').config
 local persistence  = require('loop-debug.persistence')
 local daptools     = require('loop-debug.dap.daptools')
 local debugevents  = require('loop-debug.debugevents')
@@ -287,7 +287,7 @@ function Variables:_update_data(ctx)
             end
         end
         self:refresh_content()
-    end, config.current.anti_flicker_delay)
+    end, config.anti_flicker_delay)
     self._defer_greyout_timer = timer
 
     local items = self:get_items()

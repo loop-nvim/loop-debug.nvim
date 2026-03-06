@@ -1,7 +1,7 @@
 local M = {}
 
 local strtools = require('loop.tools.strtools')
-local config = require("loop-debug.config")
+local config      = require('loop-debug').config
 
 ---@class loopdebug.TaskContext
 ---@field task loopdebug.Task
@@ -347,7 +347,7 @@ _debuggers["js-debug"] = {
             type = "term",
             label = "Debug Server",
             term_args = args,
-            activate = config.current.auto_switch_page,
+            activate = config.auto_switch_page,
         })
         if not page_data then
             callback(false, page_err)

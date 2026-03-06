@@ -2,7 +2,7 @@ local M           = {}
 
 local filetools   = require('loop.tools.file')
 local debugevents = require('loop-debug.debugevents')
-local config      = require("loop-debug.config")
+local config      = require('loop-debug').config
 local strtools    = require('loop.tools.strtools')
 local tslangspec  = require("loop-debug.tools.tslangspec")
 
@@ -73,7 +73,7 @@ local function _deferred_remove_locals_virttext()
                 _vars_clear_timer = nil
                 _remove_extmarks()
             end,
-            config.current.anti_flicker_delay)
+            config.anti_flicker_delay)
     end
 end
 
@@ -301,7 +301,7 @@ function M.init()
     if _init_done then return end
     _init_done = true
 
-    if not config.current.enable_inlay_variables then
+    if not config.enable_inlay_variables then
         return
     end
 

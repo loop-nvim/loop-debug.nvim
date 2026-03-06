@@ -1,6 +1,6 @@
 local class            = require('loop.tools.class')
 local Session          = require('loop-debug.dap.Session')
-local config           = require("loop-debug.config")
+local config      = require('loop-debug').config
 
 ---@alias loop.job.DebugJob.Command
 ---|"session"
@@ -288,7 +288,7 @@ function DebugJob:add_debug_term(sess_id, name, args, on_success, on_failure)
         type = "term",
         label = "Output",
         term_args = start_args,
-        activate = config.current.auto_switch_page,
+        activate = config.auto_switch_page,
     })
     if pd and pd.term_proc then on_success(pd.term_proc:get_pid()) else on_failure(err or "term startup error") end
 end
@@ -405,7 +405,7 @@ function DebugJob:_add_debug_output(sess_id, sess_name, category, output)
             label =
             "Output",
             activate =
-                config.current.auto_switch_page
+                config.auto_switch_page
         })
         if page_data then
             sess_data.debuggee_output_ctrl = page_data.output_buf

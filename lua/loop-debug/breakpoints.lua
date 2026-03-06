@@ -1,7 +1,7 @@
 ---@module "loop.debug_ui.breakpoints"
 
 local Trackers    = require("loop.tools.Trackers")
-local config      = require('loop-debug.config')
+local config      = require('loop-debug').config
 local loopsigns   = require('loop.signs')
 local debugevents = require('loop-debug.debugevents')
 local selector    = require("loop.tools.selector")
@@ -499,7 +499,7 @@ function M.select_breakpoint(ws_dir)
         vim.notify('No active workspace')
         return
     end
-    local symbols = config.current.symbols
+    local symbols = config.symbols
     assert(symbols)
 
     -- ---------------------------------------------------------------
@@ -636,11 +636,11 @@ function M.init()
     vim.api.nvim_set_hl(0, highlight, { link = "Debug" })
 
     _sign_group = loopsigns.define_group("Breakpoints", {
-        priority = config.current.sign_priority.breakpoints
+        priority = config.sign_priority.breakpoints
     })
 
     for name, full_name in pairs(_sign_names) do
-        _sign_group.define_sign(full_name, config.current.symbols[name], highlight)
+        _sign_group.define_sign(full_name, config.symbols[name], highlight)
     end
 
     persistence.add_tracker({

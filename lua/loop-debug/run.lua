@@ -1,6 +1,6 @@
 local M = {}
 
-local config = require('loop-debug.config')
+local config      = require('loop-debug').config
 local DebugJob = require('loop-debug.DebugJob')
 local debuggers = require("loop-debug.debuggers")
 local manager = require('loop-debug.manager')
@@ -169,7 +169,7 @@ function M.start_debug_task(ws_dir, task, page_group, on_exit)
     ---@type loop.DebugJob.StartArgs
     local start_args = {
         name = task.name,
-        enable_dap_log = (config.current.enable_dap_log == true),
+        enable_dap_log = (config.enable_dap_log == true),
         debug_args = {
             adapter = adapter_config,
             request = task.request,

@@ -3,7 +3,7 @@ local M           = {}
 local debugevents = require('loop-debug.debugevents')
 local extmarks    = require('loop.extmarks')
 local loopsigns   = require('loop.signs')
-local config      = require("loop-debug.config")
+local config      = require('loop-debug').config
 local filetools   = require('loop.tools.file')
 local uitools     = require('loop.tools.uitools')
 
@@ -24,7 +24,7 @@ function M.init()
         local normal = vim.api.nvim_get_hl(0, { name = "Normal" })
         local bg = normal.bg or 0x000000
 
-        local reddish = config.current.debug_line_blend_color or 0xD65A5A
+        local reddish = config.debug_line_blend_color or 0xD65A5A
         return uitools.blend_colors(bg, reddish, 0.12)
     end
 
@@ -33,10 +33,10 @@ function M.init()
     vim.api.nvim_set_hl(0, sign_highlight, { link = "Todo" })
     vim.api.nvim_set_hl(0, line_highlight, { bg = reddish_bg() })
 
-    _sign_group = loopsigns.define_group("CurrentFrame", { priority = config.current.sign_priority.currentframe })
-    _sign_group.define_sign(_sign_name, config.current.symbols.debug_frame or ">", sign_highlight)
+    _sign_group = loopsigns.define_group("CurrentFrame", { priority = config.sign_priority.currentframe })
+    _sign_group.define_sign(_sign_name, config.symbols.debug_frame or ">", sign_highlight)
 
-    _highlight_group = extmarks.define_group("CurrentFrameLine", { priority = config.current.sign_priority.currentframe })
+    _highlight_group = extmarks.define_group("CurrentFrameLine", { priority = config.sign_priority.currentframe })
 
     debugevents.add_tracker({
         on_debug_start = function()

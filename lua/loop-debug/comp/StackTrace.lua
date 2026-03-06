@@ -1,6 +1,6 @@
 local class = require('loop.tools.class')
 local ItemListComp = require('loop.comp.ItemList')
-local config = require('loop-debug.config')
+local config      = require('loop-debug').config
 local debugevents = require('loop-debug.debugevents')
 local Trackers = require("loop.tools.Trackers")
 
@@ -125,7 +125,7 @@ function StackTrace:_update_data(view)
                 end
                 self:refresh_content()
             end,
-            config.current.anti_flicker_delay)
+            config.anti_flicker_delay)
         local items = self:get_items()
         for _, item in ipairs(items) do
             item.data.greyout_pending = true
@@ -136,7 +136,7 @@ function StackTrace:_update_data(view)
     self._current_seqnum = sequence
     view.data_providers.stack_provider({
             threadId = view.thread_id,
-            levels = config.current.stack_levels_limit or 100,
+            levels = config.stack_levels_limit or 100,
         },
         function(err, resp)
             if not resp then return end

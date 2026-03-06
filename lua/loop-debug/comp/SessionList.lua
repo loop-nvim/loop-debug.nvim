@@ -1,6 +1,6 @@
 local class = require('loop.tools.class')
 local ItemList = require('loop.comp.ItemList')
-local config = require('loop-debug.config')
+local config      = require('loop-debug').config
 local debugevents = require('loop-debug.debugevents')
 
 ---@class loopdebug.comp.SessionListComp : loop.comp.ItemList
@@ -16,7 +16,7 @@ local function _item_formatter(id, data)
     local state = data.state
     local is_paused = data.is_paused
 
-    local symbols = config.current.symbols
+    local symbols = config.symbols
     assert(symbols)
 
     local chunks = {}
@@ -91,7 +91,7 @@ function SessionListComp:init()
                     self._sessions[id] = info
                     self:_refresh()
                     self._deferred_update_timers[id] = nil
-                end, config.current.anti_flicker_delay)
+                end, config.anti_flicker_delay)
                 -- store timer handle immediately for future cancellation
                 self._deferred_update_timers[id] = timer
             end
