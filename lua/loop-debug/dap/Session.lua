@@ -461,10 +461,12 @@ function Session:debug_pause(thread_id)
 end
 
 ---@param thread_id number
----@param all_threads boolean
-function Session:debug_continue(thread_id, all_threads)
+---@param single_thread boolean?
+function Session:debug_continue(thread_id, single_thread)
     assert(type(thread_id) == "number")
-    local single_thread = (all_threads == false)
+    if not self._capabilities["supportsSingleThreadExecutionRequests"] then
+        single_thread = nil
+    end
     self._base_session:request_continue({ threadId = thread_id, singleThread = single_thread },
         function(err, _)
             if err then
@@ -474,55 +476,102 @@ function Session:debug_continue(thread_id, all_threads)
             ---@type loopdebug.session.notify.ThreadsEventScope
             local data = {
                 thread_id = thread_id,
-                all_threads = all_threads,
+                all_threads = not single_thread,
             }
-            self:_notify_tracker("threads_continued", data)
+            self:_notify_tracker("thread_continued", data)
         end)
 end
 
 ---@param thread_id number
-function Session:debug_stepIn(thread_id)
-    assert(thread_id)
-    self._base_session:request_stepIn({ threadId = thread_id, granularity = "line" }, function(err)
-        if err then
-            self:_trace_notification("stepIn error: " .. tostring(err), "error")
-        end
-    end)
+---@param single_thread boolean?
+function Session:debug_stepIn(thread_id, single_thread)
+    assert(type(thread_id) == "number")
+    if not self._capabilities["supportsSingleThreadExecutionRequests"] then
+        single_thread = nil
+    end
+    self._base_session:request_stepIn({ threadId = thread_id, granularity = "line", singleThread = single_thread },
+        function(err)
+            if err then
+                self:_trace_notification("stepIn error: " .. tostring(err), "error")
+                return
+            end
+            ---@type loopdebug.session.notify.ThreadsEventScope
+            local data = {
+                thread_id = thread_id,
+                all_threads = not single_thread,
+            }
+            self:_notify_tracker("thread_continued", data)
+        end)
 end
 
 ---@param thread_id number
-function Session:debug_stepOut(thread_id)
-    assert(thread_id)
-    self._base_session:request_stepOut({ threadId = thread_id, granularity = "line" }, function(err)
-        if err then
-            self:_trace_notification("stepOut error: " .. tostring(err), "error")
-        end
-    end)
+---@param single_thread boolean?
+function Session:debug_stepOut(thread_id, single_thread)
+    assert(type(thread_id) == "number")
+    if not self._capabilities["supportsSingleThreadExecutionRequests"] then
+        single_thread = nil
+    end
+    self._base_session:request_stepOut({ threadId = thread_id, granularity = "line", singleThread = single_thread },
+        function(err)
+            if err then
+                self:_trace_notification("stepOut error: " .. tostring(err), "error")
+                return
+            end
+            ---@type loopdebug.session.notify.ThreadsEventScope
+            local data = {
+                thread_id = thread_id,
+                all_threads = not single_thread,
+            }
+            self:_notify_tracker("thread_continued", data)
+        end)
 end
 
 ---@param thread_id number
-function Session:debug_stepOver(thread_id)
-    assert(thread_id)
-
-    self._base_session:request_next({ threadId = thread_id, granularity = "line" }, function(err)
-        if err then
-            self:_trace_notification("stepOver error: " .. tostring(err), "error")
-        end
-    end)
+---@param single_thread boolean?
+function Session:debug_stepOver(thread_id, single_thread)
+    assert(type(thread_id) == "number")
+    if not self._capabilities["supportsSingleThreadExecutionRequests"] then
+        single_thread = nil
+    end
+    self._base_session:request_next({ threadId = thread_id, granularity = "line", singleThread = single_thread },
+        function(err)
+            if err then
+                self:_trace_notification("stepOver error: " .. tostring(err), "error")
+                return
+            end
+            ---@type loopdebug.session.notify.ThreadsEventScope
+            local data = {
+                thread_id = thread_id,
+                all_threads = not single_thread,
+            }
+            self:_notify_tracker("thread_continued", data)
+        end)
 end
 
 ---@param thread_id number
-function Session:debug_stepBack(thread_id)
+---@param single_thread boolean?
+function Session:debug_stepBack(thread_id, single_thread)
     if not self._capabilities or self._capabilities["supportsStepBack"] ~= true then
         self._log:debug("step-back not supported by this debugger")
         return
     end
-    assert(thread_id)
-    self._base_session:request_stepBack({ threadId = thread_id, granularity = "line" }, function(err)
-        if err then
-            self:_trace_notification("stepBack error: " .. tostring(err), "error")
-        end
-    end)
+    assert(type(thread_id) == "number")
+    if not self._capabilities["supportsSingleThreadExecutionRequests"] then
+        single_thread = nil
+    end
+    self._base_session:request_stepBack({ threadId = thread_id, granularity = "line", singleThread = single_thread },
+        function(err)
+            if err then
+                self:_trace_notification("stepBack error: " .. tostring(err), "error")
+                return
+            end
+            ---@type loopdebug.session.notify.ThreadsEventScope
+            local data = {
+                thread_id = thread_id,
+                all_threads = not single_thread,
+            }
+            self:_notify_tracker("thread_continued", data)
+        end)
 end
 
 function Session:debug_terminate()
@@ -618,7 +667,7 @@ function Session:_on_stopped_event(event)
         all_threads = event.allThreadsStopped,
         reason = event.reason,
     }
-    self:_notify_tracker("threads_paused", data)
+    self:_notify_tracker("thread_paused", data)
 end
 
 ---@param event loopdebug.proto.ContinuedEvent|nil
@@ -635,7 +684,7 @@ function Session:_on_continued_event(event)
         thread_id = event.threadId,
         all_threads = event.allThreadsContinued,
     }
-    self:_notify_tracker("threads_continued", data)
+    self:_notify_tracker("thread_continued", data)
 end
 
 ---@param event loopdebug.proto.BreakpointEvent|nil

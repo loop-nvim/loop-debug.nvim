@@ -19,11 +19,11 @@ local config      = require('loop-debug').config
 
 ---@class loop.job.DebugJob.SessionController
 ---@field pause fun(thread_id: number)
----@field continue fun(thread_id: number, all_threads: boolean)
----@field step_in fun(thread_id: number)
----@field step_over fun(thread_id: number)
----@field step_back fun(thread_id: number)
----@field step_out fun(thread_id: number)
+---@field continue fun(thread_id: number, single_thread: boolean?)
+---@field step_in fun(thread_id: number, single_thread: boolean?)
+---@field step_over fun(thread_id: number, single_thread: boolean?)
+---@field step_back fun(thread_id: number, single_thread: boolean?)
+---@field step_out fun(thread_id: number, single_thread: boolean?)
 ---@field terminate fun()
 
 ---@class loop.job.debugjob.Tracker
@@ -132,11 +132,11 @@ function DebugJob:_add_new_session(name, debug_args, parent_sess_id)
     ---@type loop.job.DebugJob.SessionController
     local controller               = {
         pause = function(thread_id) session:debug_pause(thread_id) end,
-        continue = function(thread_id, all_threads) session:debug_continue(thread_id, all_threads) end,
-        step_in = function(thread_id) session:debug_stepIn(thread_id) end,
-        step_over = function(thread_id) session:debug_stepOver(thread_id) end,
-        step_back = function(thread_id) session:debug_stepBack(thread_id) end,
-        step_out = function(thread_id) session:debug_stepOut(thread_id) end,
+        continue = function(thread_id, single_thread) session:debug_continue(thread_id, single_thread) end,
+        step_in = function(thread_id, single_thread) session:debug_stepIn(thread_id, single_thread) end,
+        step_over = function(thread_id, single_thread) session:debug_stepOver(thread_id, single_thread) end,
+        step_back = function(thread_id, single_thread) session:debug_stepBack(thread_id, single_thread) end,
+        step_out = function(thread_id, single_thread) session:debug_stepOut(thread_id, single_thread) end,
         terminate = function() session:debug_terminate() end,
     }
 
@@ -229,11 +229,11 @@ function DebugJob:_on_session_event(sess_id, session, event, event_data)
         self:add_debug_term(sess_id, session:name(), request.args, request.on_success, request.on_failure)
         return
     end
-    if event == "threads_paused" then
-        self:_on_session_threads_pause(sess_id, session:name(), event_data)
+    if event == "thread_paused" then
+        self:_on_session_thread_pause(sess_id, session:name(), event_data)
         return
     end
-    if event == "threads_continued" then
+    if event == "thread_continued" then
         self._tracker.on_thread_continue(sess_id, session:name(), event_data)
         return
     end
@@ -296,7 +296,7 @@ end
 ---@param sess_id number
 ---@param sess_name string
 ---@param event_data loopdebug.session.notify.ThreadsEventScope
-function DebugJob:_on_session_threads_pause(sess_id, sess_name, event_data)
+function DebugJob:_on_session_thread_pause(sess_id, sess_name, event_data)
     self._tracker.on_thread_pause(sess_id, sess_name, event_data)
 end
 

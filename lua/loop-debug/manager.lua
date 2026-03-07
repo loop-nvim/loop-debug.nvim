@@ -403,7 +403,7 @@ local function _process_continue_all_command()
     local mgr_data = _manager_data
     for _, session_data in pairs(mgr_data.session_data) do
         if session_data.cur_thread_id then
-            session_data.controller.continue(session_data.cur_thread_id, true)
+            session_data.controller.continue(session_data.cur_thread_id)
         end
     end
     return true
@@ -651,9 +651,7 @@ function M.debug_command(command, args, opts, wsdir)
         step_back = "step_back"
     }
     if step_map[command] then
-        -- Passing 'true' to continue usually implies reverse continue in some adapters,
-        -- but strictly standard DAP uses separate reqs. Assuming loop controller handles it.
-        sess_data.controller[command](sess_data.cur_thread_id, command == 'continue')
+        sess_data.controller[command](sess_data.cur_thread_id)
     else
         vim.notify("Invalid debug command: " .. tostring(command), vim.log.levels.WARN)
     end
