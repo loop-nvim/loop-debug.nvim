@@ -191,7 +191,7 @@ local function _create_components(windows)
     _destroy_components()
     for i, def in ipairs(_window_defs) do
         local winid = windows[i]
-        local compbuf = CompBuffer:new({ buftype = def.buf_type, name = def.label, bufhidden = "delete", listed = false })
+        local compbuf = CompBuffer:new({ filetype = def.buf_type, name = def.label, bufhidden = "wipe", listed = false })
         _buffers[i] = compbuf
         vim.wo[winid].winfixbuf = false
         vim.api.nvim_win_set_buf(winid, (compbuf:get_or_create_buf()))
