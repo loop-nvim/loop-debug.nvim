@@ -130,8 +130,6 @@ function Variables:init()
         render_delay_ms = 200,
     })
 
-    ---@type loopdebug.comp.Vars.Expression[]
-    self._expressions = persistence.get_config("expr") or {}
     ---@type table<string,boolean>
     self._disabled_expressions = {}
 
@@ -181,13 +179,8 @@ function Variables:init()
     ---@type loop.TrackerRef?
     self._persistence_tracker_ref = persistence.add_tracker({
         on_ws_load = function()
-            self._expressions = persistence.get_config("expr") or {}
             self._disabled_expressions = {}
             self:_update_data(self._query_context)
-        end,
-        on_ws_will_save = function()
-            ---@type loopdebug.comp.Vars.Expression[]
-            persistence.set_config("expr", self._expressions)
         end,
     })
 
@@ -197,10 +190,10 @@ end
 ---@param expr string
 ---@return loopdebug.comp.Vars.Expression?
 function Variables:_add_expr(expr)
-    local data = self._expressions
-    ---@cast data loopdebug.comp.Vars.Expression[]
+    ---@type loopdebug.comp.Vars.Expression[]
+    local expressions = persistence.get_config("expr") or {}
     local max_id = 1
-    for _, v in ipairs(data) do
+    for _, v in ipairs(expressions) do
         max_id = math.max(max_id, v.id)
     end
     local new_id = max_id + 1
@@ -209,8 +202,7 @@ function Variables:_add_expr(expr)
         id = new_id,
         expr = expr,
     }
-    table.insert(data, expr_obj)
-
+    table.insert(expressions, expr_obj)
     local root_id = self._expr_root_id
     local item_id = root_id .. "/" .. tostring(expr_obj.id)
     local existing_item = self:get_item(item_id)
@@ -231,7 +223,7 @@ function Variables:_add_expr(expr)
         }
         self:add_item(root_id, item_def)
     end
-
+    persistence.set_config("expr", expressions)
     self:_load_expr_value(self._query_context, expr_obj)
 end
 
@@ -239,11 +231,12 @@ end
 ---@param old string
 ---@param new string
 function Variables:_reset_expr(id, old, new)
-    local data = self._expressions
-    ---@cast data loopdebug.comp.Vars.Expression[]
-    for _, expr_obj in ipairs(data) do
+    ---@type loopdebug.comp.Vars.Expression[]
+    local expressions = persistence.get_config("expr") or {}
+    for _, expr_obj in ipairs(expressions) do
         if expr_obj.id == id then
             expr_obj.expr = new
+            persistence.set_config("expr", expressions)
             self:_load_expr_value(self._query_context, expr_obj)
             return
         end
@@ -252,11 +245,11 @@ end
 
 ---@param id number
 function Variables:_remove_expr(id)
-    local data = self._expressions
-    ---@cast data loopdebug.comp.Vars.Expression[]
-    for i, expr_obj in ipairs(data) do
+    local expressions = persistence.get_config("expr") or {}
+    for i, expr_obj in ipairs(expressions) do
         if expr_obj.id == id then
-            table.remove(data, i)
+            table.remove(expressions, i)
+            persistence.set_config("expr", expressions)
             local root_id = self._expr_root_id
             local item_id = root_id .. "/" .. tostring(expr_obj.id)
             self:remove_item(item_id)
@@ -402,9 +395,13 @@ function Variables:_load_expressions(context)
         self:remove_children(root_id)
         return
     end
+
+    ---@type loopdebug.comp.Vars.Expression[]
+    local expressions = persistence.get_config("expr") or {}
+
     do
         local exr_names = {}
-        for _, expr_obj in ipairs(self._expressions) do
+        for _, expr_obj in ipairs(expressions) do
             exr_names[expr_obj.expr] = true
         end
         local children = self:get_children(self._expr_root_id)
@@ -414,7 +411,7 @@ function Variables:_load_expressions(context)
             end
         end
     end
-    for _, expr_obj in ipairs(self._expressions) do
+    for _, expr_obj in ipairs(expressions) do
         local item_id = root_id .. "/" .. tostring(expr_obj.id)
         local existing_item = self:get_item(item_id)
         if not existing_item then

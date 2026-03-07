@@ -1,3 +1,14 @@
+> [!WARNING]
+> 🚧 **Work in Progress**
+>
+> This plugin is currently under active development.
+>
+> - APIs and configuration may change
+> - Breaking changes can occur without notice
+>
+> Use with caution until a stable release is announced.
+> Issues, suggestions, and contributions are welcome while the project evolves.
+
 # loop-debug.nvim
 
 Debug extension for [loop.nvim](https://github.com/mbfoss/loop.nvim). Adds a **debug** task type and debugging support via DAP (breakpoints, stepping, call stack, watch, REPL) inside the Loop UI. Supports multiple debuggers and sessions.
@@ -42,7 +53,7 @@ use {
 ## Quick Start
 
 1. Install loop.nvim and loop-debug.nvim.
-2. Open a loop workspace (`:Loop workspace open`).
+2. Create a loop workspace (`:Loop workspace create`).
 3. Add a debug task: `:Loop task configure` and add a task from one of the templates in the **Debug** category.
 4. Run the debug task: `:Loop task run` (or `:Loop task run Debug`).
 5. Use `:Loop debug ui toggle` to show the debug UI.
