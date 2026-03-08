@@ -13,7 +13,7 @@ local class = require('loop.tools.class')
 ---@field dap_cwd string|nil
 ---@field dap_host string|nil
 ---@field dap_port number|nil
----@field on_message fun(msg:string)
+---@field on_message fun(msg:any)
 ---@field on_stderr fun(text: string)
 ---@field on_exit fun(code: number, signal: number)
 ---@field dap_log_handler fun(msg:string,inbound:boolean)?
@@ -45,6 +45,11 @@ function Channel:init(name, opts)
     return self
 end
 
+---@rturn boolean,string?
+function Channel:start()
+    return self.transport:start()
+end
+
 function Channel:running()
     return self.transport:running()
 end
@@ -67,16 +72,20 @@ function Channel:_create_process(name, opts)
         env = opts.dap_env,
         cwd = opts.dap_cwd,
         on_output = function(data, is_stderr)
-            if not is_stderr then
-                self:_on_data(buffer, data)
-            elseif self.on_stderr then
-                self.on_stderr(tostring(data))
-            end
+            vim.schedule(function()
+                if not is_stderr then
+                    self:_on_data(buffer, data)
+                elseif self.on_stderr then
+                    self.on_stderr(tostring(data))
+                end
+            end)
         end,
         on_exit = function(code, signal)
-            if opts.on_exit then
-                opts.on_exit(code, signal)
-            end
+            vim.schedule(function()
+                if opts.on_exit then
+                    opts.on_exit(code, signal)
+                end
+            end)
         end
     })
 end
@@ -179,7 +188,9 @@ function Channel:_on_data(buffer, data)
         end
 
         -- 8. Dispatch the message (in the nvim main thread)
-        self.on_message(message)
+        vim.schedule(function()
+            self.on_message(message)
+        end)
     end
 end
 

@@ -255,18 +255,13 @@ function Session:start(args)
             return false, "Debugger command is missing"
         end
 
-        local dap_path = vim.fn.exepath(dap_program)
-        if dap_path == nil or dap_path == "" then
-            return false, "Debugger program is not executable: " .. tostring(dap_program)
-        end
-
         local dap_args = { unpack(cmd_and_args, 2) }
 
         self._base_session = BaseSession:new(self._name)
-        start_ok, start_err = pcall(function()
+        start_ok, start_err =
             self._base_session:start({
                 dap_mode = "executable",
-                dap_cmd = dap_path,  -- dap process
+                dap_cmd = dap_program,  -- dap process
                 dap_args = dap_args, -- dap args
                 dap_env = adapter.env,
                 dap_cwd = adapter.cwd,
@@ -274,7 +269,6 @@ function Session:start(args)
                 on_exit = exit_handler,
                 dap_log_handler = dap_log_handler,
             })
-        end)
     else
         if not adapter.host or adapter.host == "" or not adapter.port then
             return false, "Missing DAP server host name or port"
@@ -283,16 +277,14 @@ function Session:start(args)
             return false, "Invalid DAP server port: " .. tostring(adapter.port)
         end
         self._base_session = BaseSession:new(self._name)
-        start_ok, start_err = pcall(function()
-            self._base_session:start({
-                dap_mode = "server",
-                dap_host = adapter.host,
-                dap_port = adapter.port,
-                on_stderr = stderr_handler,
-                on_exit = exit_handler,
-                dap_log_handler = dap_log_handler,
-            })
-        end)
+        start_ok, start_err = self._base_session:start({
+            dap_mode = "server",
+            dap_host = adapter.host,
+            dap_port = adapter.port,
+            on_stderr = stderr_handler,
+            on_exit = exit_handler,
+            dap_log_handler = dap_log_handler,
+        })
     end
     if not start_ok then
         return false, "Debug adapter initialization error, " .. tostring(start_err)

@@ -1,6 +1,7 @@
 -- Process.lua
 local uv = require('luv')
 local class = require('loop.tools.class')
+local fntools = require('loop.tools.fntools')
 
 local function _safe_close(h)
     if h and not h:is_closing() then
@@ -18,6 +19,7 @@ end
 
 ---@class loopdebug.Process
 ---@field new fun(self: loopdebug.Process, name : string, opts : loopdebug.Process.Opts) : loopdebug.Process
+---@field start fun(self: loopdebug.Process) : boolean,string?
 local Process = class()
 
 ---@param name string
@@ -35,7 +37,7 @@ function Process:init(name, opts)
     else
         self.env = vim.fn.copy(vim.fn.environ() or {}) -- inherid parent env
     end
-    self.env['PWD'] = self.cwd                      -- required for commands to use cwd in all cases
+    self.env['PWD'] = self.cwd                         -- required for commands to use cwd in all cases
 
     self.on_output = opts.on_output
     self.on_exit = opts.on_exit
@@ -43,20 +45,27 @@ function Process:init(name, opts)
     self.exited = false
     self.killed = false
 
+    return self
+end
+
+---@return boolean,string?
+function Process:start()
+    assert(not self._started)
+    self._started = true
+
     self.stdin = uv.new_pipe(false)
     self.stdout = uv.new_pipe(false)
     self.stderr = uv.new_pipe(false)
 
-    self:_spawn()
-    if not self.handle then
+    local ok, err_str = self:_spawn()
+    if not ok or not self.handle then
         self:_close_all()
+        return false, err_str
     end
-    return self
+    return true
 end
 
--------------------------------------------------
--- Spawn and IO reading
--------------------------------------------------
+---@return boolean,string?
 function Process:_spawn()
     local opts = {
         args = self.args,
@@ -65,63 +74,56 @@ function Process:_spawn()
         stdio = { self.stdin, self.stdout, self.stderr },
     }
 
-    self.log:debug("starting process: " ..
-        tostring(self.cmd) .. ", opts: " .. vim.inspect(opts))
+    self.log:debug("starting process: " .. tostring(self.cmd))
 
-    local handle, pid = uv.spawn(self.cmd, opts, vim.schedule_wrap(function(code, signal)
+    local exec_path = vim.fn.exepath(self.cmd)
+    if exec_path == nil or exec_path == "" then
+        return false, "Debugger program is not executable: " .. tostring(self.cmd)
+    end
+
+    -- Entire callback is scheduled to Neovim's main thread
+    local handle, pid_or_err = uv.spawn(exec_path, opts, vim.schedule_wrap(function(code, signal)
         if self.exited then return end
         self.exited = true
 
-        -- Stop reading immediately
-        if self.stdout and self.stdout:is_active() then
-            self.stdout:read_stop()
-        end
-        if self.stderr and self.stderr:is_active() then
-            self.stderr:read_stop()
-        end
+        self._kill_timer = fntools.stop_and_close_timer(self._kill_timer)
+        -- Clean shutdown of readers
 
-        -- Always run on_exit, even during shutdown
-        if self.on_exit then
-            local ok, err = pcall(self.on_exit, code, signal)
-            if not ok then
-                -- Log error but don't crash
-                print("Process on_exit error:", err)
-            end
-        end
-
-        -- Always close everything — this MUST run
+        if self.stdout and self.stdout:is_active() then self.stdout:read_stop() end
+        if self.stderr and self.stderr:is_active() then self.stderr:read_stop() end
         self:_close_all()
+
+        if self.on_exit then
+            self.on_exit(code, signal)
+        end
     end))
 
     if not handle then
-        self.on_output("failed to start debugger process: " .. tostring(self.cmd), true)
-        return
+        self.exited = true
+        return false, ("failed to start process (%s): %s"):format(self.cmd, tostring(pid_or_err))
     end
 
-    self.handle = handle
-    self.pid = pid
+    self.handle, self.pid = handle, pid_or_err
 
-    -- Start reading stdout
-    self.stdout:read_start(function(err, data)
-        if err then
-            vim.schedule(function() error(err) end)
-            return
-        end
-        if data and self.on_output then
-            self.on_output(data, false)
-        end
-    end)
+    -- Helper to keep stdout/stderr logic clean
+    local function create_reader(is_stderr)
+        local pipe = is_stderr and self.stderr or self.stdout
+        pipe:read_start(function(err, data)
+            if err then
+                vim.schedule(function() error(err) end)
+                return
+            end
+            if data then
+                vim.schedule(function() self.on_output(data, is_stderr) end)
+            else
+                pipe:read_stop() -- Stop polling on EOF
+            end
+        end)
+    end
 
-    -- Start reading stderr
-    self.stderr:read_start(function(err, data)
-        if err then
-            vim.schedule(function() error(err) end)
-            return
-        end
-        if data and self.on_output then
-            self.on_output(data, true)
-        end
-    end)
+    create_reader(false) -- stdout
+    create_reader(true)  -- stderr
+    return true
 end
 
 -- Convert env dict → {"KEY=value", ...}
@@ -151,15 +153,17 @@ function Process:running()
     return self.handle ~= nil
 end
 
-function Process:terminate(timeout)
+function Process:terminate()
     if self.exited or self.killed then return end
     self.killed = true
 
     _safe_close(self.stdin) -- dap process should stop after this
-    vim.defer_fn(function()
+
+    self._kill_timer = fntools.stop_and_close_timer(self._kill_timer)
+    self._kill_timer = vim.defer_fn(function()
         if self.handle and not self.handle:is_closing() then
             vim.notify("DAP process did not terminate cleanly")
-            self.handle:kill("sigkill")
+            self.handle:kill("SIGKILL")
         end
     end, 10000)
 end

@@ -34,6 +34,7 @@ function BaseSession:init(name)
 end
 
 ---@param opts loopdebug.BaseSession.Opts
+---@return boolean,string?
 function BaseSession:start(opts)
     assert(type(opts.on_stderr) == "function")
     assert(type(opts.on_exit) == "function")
@@ -52,18 +53,8 @@ function BaseSession:start(opts)
         dap_cwd         = opts.dap_cwd,
         dap_host        = opts.dap_host,
         dap_port        = opts.dap_port,
-        on_message      = vim.schedule_wrap(
-        -- schedule to avoid processing in the fast event context
-            function(msg)
-                self:_on_message(msg)
-            end),
-        on_stderr       = vim.schedule_wrap(
-        -- schedule to avoid processing in the fast event context
-            function(text)
-                vim.schedule(function()
-                    opts.on_stderr(text)
-                end)
-            end),
+        on_message      = function(msg) self:_on_message(msg) end,
+        on_stderr       = function(text) opts.on_stderr(text) end,
         on_exit         = function(code, signal)
             vim.schedule(function() self:_on_exit() end)
             vim.schedule(function()
@@ -74,7 +65,7 @@ function BaseSession:start(opts)
     }
 
     self.channel = Channel:new(self._name, channel_opts)
-    return self
+    return self.channel:start()
 end
 
 ---@return boolean

@@ -10,6 +10,7 @@ local class = require('loop.tools.class')
 
 ---@class loopdebug.Tcp
 ---@field new fun(self: loopdebug.Tcp, name:string, opts:loopdebug.Tcp.Opts): loopdebug.Tcp
+---@field start fun(self: loopdebug.Tcp) : boolean,string?
 local Tcp = class()
 
 function Tcp:init(name, opts)
@@ -26,12 +27,18 @@ function Tcp:init(name, opts)
     self.killed = false
     self.is_connected = false
     self.write_queue = {} -- Queue for writes before connection
+    return self
+end
 
+---@return boolean,string?
+function Tcp:start()
+    assert(not self._started)
+    self._started = true
     self.log:debug("Creating tcp socket")
     ---@diagnostic disable-next-line: undefined-field
     self.socket = uv.new_tcp()
     self:_connect_with_resolution()
-    return self
+    return true
 end
 
 -- Main entry: resolve if needed, then connect
