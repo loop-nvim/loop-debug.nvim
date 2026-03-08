@@ -89,8 +89,6 @@ function Process:_spawn()
         self._kill_timer = fntools.stop_and_close_timer(self._kill_timer)
         -- Clean shutdown of readers
 
-        if self.stdout and self.stdout:is_active() then self.stdout:read_stop() end
-        if self.stderr and self.stderr:is_active() then self.stderr:read_stop() end
         self:_close_all()
 
         if self.on_exit then
@@ -166,6 +164,7 @@ function Process:terminate()
             self.handle:kill("SIGKILL")
         end
     end, 10000)
+    -- do touch other handles here, otherwise on_exit will not be called
 end
 
 -------------------------------------------------
