@@ -1,4 +1,5 @@
 local class = require('loop.tools.class')
+local fntools = require('loop.tools.fntools')
 local ItemList = require('loop.comp.ItemList')
 local config      = require('loop-debug').config
 local debugevents = require('loop-debug.debugevents')
@@ -98,12 +99,7 @@ function SessionListComp:init()
         end,
         on_session_removed = function(id)
             self._sessions[id] = nil
-            local timer = self._deferred_update_timers[id]
-            if timer then
-                if timer:is_active() then timer:stop() end
-                timer:close()
-            end
-            self._deferred_update_timers[id] = nil
+            self._deferred_update_timers[id] = fntools.stop_and_close_timer(self._deferred_update_timers[id])
             self:_refresh()
         end,
         on_view_udpate = function(view)
@@ -118,10 +114,7 @@ function SessionListComp:dispose()
         self._events_tracker_ref.cancel()
     end
     for _, timer in pairs(self._deferred_update_timers) do
-        if timer:is_active() then
-            timer:stop()
-        end
-        timer:close()
+        fntools.stop_and_close_timer(timer)
     end
     self._deferred_update_timers = {}
 end

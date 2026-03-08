@@ -1,5 +1,6 @@
 local class = require('loop.tools.class')
 local strtools = require('loop.tools.strtools')
+local fntools = require('loop.tools.fntools')
 
 local BaseSession = require("loop-debug.dap.BaseSession")
 local FSM = require("loop-debug.tools.FSM")
@@ -947,6 +948,7 @@ function Session:_on_disconnecting_state()
     self:_notify_about_state()
 
     --set a 3 seconds timeout to avoid hanging during stop
+    ---@type table?
     local timeout_timer = vim.defer_fn(function()
             self._fsm:trigger(fsmdata.trigger.disconnect_timeout)
         end,
@@ -955,10 +957,7 @@ function Session:_on_disconnecting_state()
     self._base_session:request_disconnect({
         terminateDebuggee = terminate_debuggee
     }, function(err, body)
-        if timeout_timer then
-            if timeout_timer:is_active() then timeout_timer:stop() end
-            timeout_timer:close()
-        end
+        timeout_timer = fntools.stop_and_close_timer(timeout_timer)
         self._fsm:trigger(err == nil and fsmdata.trigger.disconnect_ok or fsmdata.trigger.disconnect_err)
     end)
 end

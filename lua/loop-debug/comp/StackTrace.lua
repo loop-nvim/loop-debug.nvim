@@ -1,4 +1,5 @@
 local class = require('loop.tools.class')
+local fntools = require('loop.tools.fntools')
 local ItemListComp = require('loop.comp.ItemList')
 local config      = require('loop-debug').config
 local debugevents = require('loop-debug.debugevents')
@@ -107,11 +108,7 @@ end
 
 ---@param view loopdebug.events.CurrentViewUpdate
 function StackTrace:_update_data(view)
-    if self._antiflicker_timer then
-        if self._antiflicker_timer:is_active() then self._antiflicker_timer:stop() end
-        self._antiflicker_timer:close()
-        self._antiflicker_timer = nil
-    end
+    self._antiflicker_timer = fntools.stop_and_close_timer(self._antiflicker_timer)
     if not view.thread_id then
         --defer to avoid flickering
         self._antiflicker_timer = vim.defer_fn(function()

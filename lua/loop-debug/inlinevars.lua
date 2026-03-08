@@ -4,6 +4,7 @@ local filetools   = require('loop.tools.file')
 local debugevents = require('loop-debug.debugevents')
 local config      = require('loop-debug').config
 local strtools    = require('loop.tools.strtools')
+local fntools    = require('loop.tools.fntools')
 local tslangspec  = require("loop-debug.tools.tslangspec")
 
 do
@@ -59,11 +60,7 @@ local function _set_file_extmark(id, filepath, line, col, opts)
 end
 
 local function _cancel_deferred_remove_locals_virttext()
-    if _vars_clear_timer then
-        if _vars_clear_timer:is_active() then _vars_clear_timer:stop() end
-        _vars_clear_timer:close()
-        _vars_clear_timer = nil
-    end
+    _vars_clear_timer = fntools.stop_and_close_timer(_vars_clear_timer)
 end
 
 local function _deferred_remove_locals_virttext()
