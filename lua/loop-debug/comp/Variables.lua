@@ -146,12 +146,6 @@ function Variables:init()
         on_toggle = function(_, data, expanded)
             self._layout_cache[data.path] = expanded
         end,
-        on_open = function(_, data)
-            if data.scopelabel or data.is_na then return end
-            floatwin.show_floatwin(daptools.format_variable(tostring(data.value), data.presentationHint), {
-                title = data.name or "value"
-            })
-        end
     })
 
     ---@type loop.TrackerRef?
@@ -652,6 +646,17 @@ function Variables:link_to_buffer(comp)
             if cur and cur.data.is_expr then
                 self:_remove_expr(cur.data.expr_id)
             end
+        end
+    })
+    comp.add_keymap("go", {
+        desc = "Variable details",
+        callback = function()
+            local cur = self:get_cur_item()
+            local data = cur and cur.data
+            if data.scopelabel or data.is_na then return end
+            floatwin.show_floatwin(daptools.format_variable(tostring(data.value), data.presentationHint), {
+                title = data.name or "value"
+            })
         end
     })
 end

@@ -34,9 +34,6 @@ local function _debug_commands(args)
             "enable", "disable", "toggle_enabled", "disable_all", "enable_all",
             "delete", "clear_file", "clear_all" }
     end
-    if #args == 1 and args[1] == "ui" then
-        return { "show", "hide", "toggle" }
-    end
     return {}
 end
 

@@ -15,7 +15,6 @@ local config      = require('loop-debug').config
 ---|"continue_all"
 ---|"terminate_all"
 ---|"inspect"
----|"ui"
 
 ---@class loop.job.DebugJob.SessionController
 ---@field pause fun(thread_id: number)
