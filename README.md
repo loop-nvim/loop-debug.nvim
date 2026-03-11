@@ -65,7 +65,6 @@ Commands be selected using the command selector by typing `:Loop`
 
 | Command | Description |
 |--------|-------------|
-| `:Loop debug ui` | Toggle / show / hide debug UI; `save_layout` to save layout |
 | `:Loop debug breakpoint` | Manage breakpoints (see subcommands below) |
 | `:Loop debug continue` | Continue execution |
 | `:Loop debug continue_all` | Continue all sessions |

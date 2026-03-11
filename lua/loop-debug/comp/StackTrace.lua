@@ -6,7 +6,7 @@ local debugevents = require('loop-debug.debugevents')
 local Trackers = require("loop.tools.Trackers")
 
 ---@class loopdebug.comp.StackTrace : loop.comp.ItemList
----@field new fun(self: loopdebug.comp.StackTrace, name:string): loopdebug.comp.StackTrace
+---@field new fun(self: loopdebug.comp.StackTrace): loopdebug.comp.StackTrace
 local StackTrace = class(ItemListComp)
 
 ---@param id any

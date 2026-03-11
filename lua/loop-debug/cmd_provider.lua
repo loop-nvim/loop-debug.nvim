@@ -1,7 +1,6 @@
 local M = {}
 
 local manager = require("loop-debug.manager")
-local debugui = require("loop-debug.ui")
 
 local function _debug_commands(args)
     if #args == 0 then
@@ -36,7 +35,7 @@ local function _debug_commands(args)
             "delete", "clear_file", "clear_all" }
     end
     if #args == 1 and args[1] == "ui" then
-        return { "show", "hide", "toggle", "save_layout" }
+        return { "show", "hide", "toggle" }
     end
     return {}
 end
@@ -50,21 +49,6 @@ end
 ---@param wsdir string
 local function _do_command(args, opts, wsdir)
     local cmd = args[1]
-    if cmd == "ui" then
-        local sub_cmd = args[2]
-        if not sub_cmd or sub_cmd == "" or sub_cmd == "toggle" then
-            debugui.toggle()
-        elseif sub_cmd == "show" then
-            debugui.show()
-        elseif sub_cmd == "hide" then
-            debugui.hide()
-        elseif sub_cmd == "save_layout" then
-            debugui.save_layout()
-        else
-            vim.notify("Invalid Debug UI command: " .. tostring(sub_cmd))
-        end
-        return
-    end
     manager.debug_command(cmd, args, opts, wsdir)
 end
 
