@@ -37,7 +37,7 @@ local side_view_def   = {
     get_comp_buffers = function()
         local comp_buffers = {}
         for i, def in ipairs(_window_defs) do
-            local compbuf = CompBuffer:new({ filetype = def.buf_type, name = def.label, bufhidden = "wipe", listed = false })
+            local compbuf = CompBuffer:new({ filetype = def.buf_type, name = def.label })
             local comp = def.comp_class:new()
             comp:link_to_buffer(compbuf:make_controller())
             table.insert(comp_buffers, compbuf)
