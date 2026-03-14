@@ -11,7 +11,7 @@
 
 # loop-debug.nvim
 
-Debug extension for [loop.nvim](https://github.com/mbfoss/loop.nvim). Adds a **debug** task type and debugging support via DAP (breakpoints, stepping, call stack, watch, REPL) inside the Loop UI. Supports multiple debuggers and sessions.
+Debug extension for [loop.nvim](https://github.com/loop-nvim/loop.nvim). Adds a **debug** task type and debugging support via DAP (breakpoints, stepping, call stack, watch, REPL) inside the Loop UI. Supports multiple debuggers and sessions.
 
 **Note:** This plugin uses its own DAP implementation and configuration. It does **not** require or depend on `nvim-dap`.
 
@@ -36,8 +36,8 @@ Debug adapters (e.g. lldb-dap, debugpy, codelldb) are typically installed via [M
 
 ```lua
 {
-    "mbfoss/loop-debug.nvim",
-    dependencies = { "mbfoss/loop.nvim" },
+    "loop-nvim/loop-debug.nvim",
+    dependencies = { "loop-nvim/loop.nvim" },
 }
 ```
 
@@ -45,8 +45,8 @@ Debug adapters (e.g. lldb-dap, debugpy, codelldb) are typically installed via [M
 
 ```lua
 use {
-    "mbfoss/loop-debug.nvim",
-    requires = { "mbfoss/loop.nvim" },
+    "loop-nvim/loop-debug.nvim",
+    requires = { "loop-nvim/loop.nvim" },
 }
 ```
 
@@ -95,7 +95,7 @@ Commands be selected using the command selector by typing `:Loop`
 | `debug_options` | `table` | Flexible table for debugger-specific settings. |
 
 
-All fields support [loop.nvim macros](https://github.com/mbfoss/loop.nvim) (e.g. `${file}`, `${wsdir}`, `${prompt:...}`, `${select-pid}`).
+All fields support [loop.nvim macros](https://github.com/loop-nvim/loop.nvim) (e.g. `${file}`, `${wsdir}`, `${prompt:...}`, `${select-pid}`).
 
 ## Built-in Debuggers
 

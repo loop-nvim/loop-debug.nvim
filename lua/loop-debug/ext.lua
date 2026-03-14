@@ -17,10 +17,10 @@ local extension     =
         end
 
         persistence.on_workspace_load(ext_data.state)
+        local sideview_ctrl = ext_data.register_side_view("debug", sideviewdef.get_sideview_def())
         ext_data.register_user_command("debug", cmd_provider.get_cmd_provider(ext_data))
-        ext_data.register_task_type("debug", task_provider.get_task_type_provider(ext_data))
+        ext_data.register_task_type("debug", task_provider.get_task_type_provider(ext_data, sideview_ctrl))
         ext_data.register_task_templates("Debug", task_provider.get_task_template_provider())
-        ext_data.register_side_view("debug", sideviewdef.get_sideview_def())
     end,
     on_workspace_unload = function(_)
         persistence.on_workspace_unload()

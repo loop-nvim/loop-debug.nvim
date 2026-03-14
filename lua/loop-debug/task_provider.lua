@@ -3,7 +3,8 @@ local M = {}
 local run = require('loop-debug.run')
 
 ---@param ext_data loop.ExtensionData
-function M.get_task_type_provider(ext_data)
+---@param sideview_ctrl loop.SideViewCtrl
+function M.get_task_type_provider(ext_data, sideview_ctrl)
     ---@type loop.TaskTypeProvider
     return
     {
@@ -12,6 +13,7 @@ function M.get_task_type_provider(ext_data)
             return schema
         end,
         start_one_task = function(task, page_group, on_exit)
+            sideview_ctrl.show()
             ---@cast task loopdebug.Task
             return run.start_debug_task(ext_data.ws_dir, task, page_group, on_exit)
         end,

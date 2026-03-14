@@ -5,8 +5,6 @@ local manager = require("loop-debug.manager")
 local function _debug_commands(args)
     if #args == 0 then
         return {
-            -- UI
-            "ui",
             -- Breakpoints
             "breakpoint",
             -- Execution control
