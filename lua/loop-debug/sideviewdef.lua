@@ -37,12 +37,15 @@ local side_view_def   = {
     get_comp_buffers = function()
         local comp_buffers = {}
         for i, def in ipairs(_window_defs) do
-            local compbuf = CompBuffer:new({ filetype = def.buf_type, name = def.label })
+            local compbuf = CompBuffer:new({ filetype = def.buf_type, name = def.label, listed = false })
             local comp = def.comp_class:new()
             comp:link_to_buffer(compbuf:make_controller())
             table.insert(comp_buffers, compbuf)
         end
         return comp_buffers
+    end,
+    on_hide = function ()
+        
     end,
     get_ratio = function()
         return { 0.5, 0.4, 0.1 }
